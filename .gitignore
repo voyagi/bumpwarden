@@ -1,0 +1,17 @@
+# environment
+.env
+.env.*
+
+# dependencies
+node_modules/
+__pycache__/
+.venv/
+
+# build output
+dist/
+build/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
