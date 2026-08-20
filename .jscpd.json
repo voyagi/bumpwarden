@@ -1,0 +1,21 @@
+{
+  "minTokens": 70,
+  "minLines": 8,
+  "threshold": 0,
+  "reporters": ["console-full"],
+  "ignore": [
+    "**/.git/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/playwright-report/**",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/*.d.ts",
+    "**/*.md",
+    "**/docs/**",
+    "**/design/**",
+    "**/package-lock.json"
+  ]
+}

@@ -1,6 +1,7 @@
 # environment
 .env
 .env.*
+!.env.example
 
 # dependencies
 node_modules/
@@ -15,3 +16,5 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# local planning notes

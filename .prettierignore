@@ -1,0 +1,7 @@
+dist
+coverage
+node_modules
+package-lock.json
+scripts/check-client-secrets.mjs
+scripts/check-client-secrets.mutants.mjs
+verify-ship.mjs

@@ -1,0 +1,26 @@
+name: gates
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - run: npm ci
+      - run: npm run build --if-present
+      # Typecheck, the full test suite, whole-repo lint, then the committed floors, fail-fast.
+      - run: npm run verify:ship
+      # The client-secret scan needs built client assets to look at, so it runs after the build
+      # and is pointed at the static directory the server ships.
+      - run: node scripts/check-client-secrets.mjs public
