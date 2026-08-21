@@ -40,6 +40,21 @@ export interface ReleaseNotes {
  * shares one budget, one cache and one backoff policy. Writes go through Octokit instead, in
  * `github-actor.ts`, where the typed routes and error shapes are worth the second client.
  */
+/**
+ * Owner and repo reach here from the watch list and from a package's own registry metadata, and
+ * every route below pastes them into a path. Encoding them means a name carrying a slash, a dot
+ * segment or a query string stays one path segment instead of steering the request somewhere else
+ * on api.github.com with this service's token attached.
+ */
+function repoBase(target: RepoRef): string {
+  return `${API}/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}`;
+}
+
+/** A file path keeps its separators; each segment is still one segment. */
+function filePath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/');
+}
+
 function headers(token: string | null): Record<string, string> {
   const base: Record<string, string> = {
     accept: 'application/vnd.github+json',
@@ -54,7 +69,7 @@ export async function fetchTextFile(
   path: string,
   token: string | null = null,
 ): Promise<Outcome<string>> {
-  const url = `${API}/repos/${target.owner}/${target.repo}/contents/${path}?ref=${encodeURIComponent(target.ref)}`;
+  const url = `${repoBase(target)}/contents/${filePath(path)}?ref=${encodeURIComponent(target.ref)}`;
   const result = await fetcher.getJson<ContentsResponse>(url, headers(token));
   if (!result.ok) return result;
 
@@ -87,7 +102,7 @@ export async function fetchReleaseNotes(
   token: string | null = null,
 ): Promise<Outcome<ReleaseNotes>> {
   for (const tag of tagCandidates(version)) {
-    const url = `${API}/repos/${target.owner}/${target.repo}/releases/tags/${encodeURIComponent(tag)}`;
+    const url = `${repoBase(target)}/releases/tags/${encodeURIComponent(tag)}`;
     const result = await fetcher.getJson<ReleaseResponse>(url, headers(token));
 
     if (result.ok && typeof result.value.body === 'string' && result.value.body.trim().length > 0) {
@@ -133,7 +148,7 @@ export async function fetchTree(
   target: RepoRef,
   token: string | null = null,
 ): Promise<Outcome<RepositoryTree>> {
-  const url = `${API}/repos/${target.owner}/${target.repo}/git/trees/${encodeURIComponent(target.ref)}?recursive=1`;
+  const url = `${repoBase(target)}/git/trees/${encodeURIComponent(target.ref)}?recursive=1`;
   const result = await fetcher.getJson<TreeResponse>(url, headers(token));
   if (!result.ok) return result;
 
@@ -195,7 +210,7 @@ export async function compareTags(
   head: string,
   token: string | null = null,
 ): Promise<Outcome<CompareFacts>> {
-  const url = `${API}/repos/${target.owner}/${target.repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
+  const url = `${repoBase(target)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
   const result = await fetcher.getJson<CompareResponse>(url, headers(token));
   if (!result.ok) return result;
 

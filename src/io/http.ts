@@ -14,6 +14,8 @@ export interface RunFetcherOptions {
   maxRetries?: number;
   sleep?: (ms: number) => Promise<void>;
   userAgent?: string;
+  timeoutMs?: number;
+  maxBytes?: number;
 }
 
 export interface FetcherStats {
@@ -26,6 +28,21 @@ export interface FetcherStats {
 
 const DEFAULT_BUDGET = 300;
 const DEFAULT_MAX_RETRIES = 3;
+
+/**
+ * A run is answered inside one HTTP request that Cloud Run will cut off, so no single read may sit
+ * on the clock indefinitely. Node's own defaults are five minutes per phase, which four attempts
+ * turn into twenty, well past any deadline this service has: a slow source has to become a
+ * recorded missing source quickly rather than a run that never returns.
+ */
+const DEFAULT_TIMEOUT_MS = 20_000;
+
+/**
+ * Nothing this service reads is legitimately large: the biggest is a registry packument for a
+ * package with thousands of versions. The cap exists because the body arrives from a party that
+ * chooses its size, and this container has 512 MB.
+ */
+const DEFAULT_MAX_BYTES = 24 * 1024 * 1024;
 const BASE_BACKOFF_MS = 500;
 const MAX_BACKOFF_MS = 8_000;
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -69,6 +86,8 @@ export class RunFetcher {
   private readonly userAgent: string;
   private readonly cache = new Map<string, Outcome<string>>();
   private readonly budget: number;
+  private readonly timeoutMs: number;
+  private readonly maxBytes: number;
   private calls = 0;
   private cacheHits = 0;
   private retries = 0;
@@ -79,6 +98,8 @@ export class RunFetcher {
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.budget = options.budget ?? DEFAULT_BUDGET;
     this.userAgent = options.userAgent ?? 'bumpwarden';
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
   }
 
   stats(): FetcherStats {
@@ -137,7 +158,13 @@ export class RunFetcher {
         continue;
       }
 
-      if (response.ok) return { ok: true, value: await response.text(), fromCache: false };
+      if (response.ok) {
+        const body = await this.readBounded(response);
+        if (body === null) {
+          return failure('malformed', response.status, `body over ${this.maxBytes} bytes: ${url}`);
+        }
+        return { ok: true, value: body, fromCache: false };
+      }
       lastStatus = response.status;
 
       if (response.status === 404) return failure('not-found', 404, `no such resource: ${url}`);
@@ -156,9 +183,47 @@ export class RunFetcher {
     return failure('unavailable', lastStatus, `exhausted retries for ${url}`);
   }
 
+  /**
+   * Read the body a chunk at a time and stop at the cap rather than calling `.text()`, which
+   * decides how much memory to take from a `content-length` the sender wrote. A sender who lies
+   * about that header, or omits it, is exactly the case the cap is for.
+   */
+  private async readBounded(response: Response): Promise<string | null> {
+    const declared = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declared) && declared > this.maxBytes) return null;
+
+    const body = response.body;
+    if (!body) return response.text();
+
+    const decoder = new TextDecoder();
+    const reader = body.getReader();
+    let read = 0;
+    let text = '';
+
+    try {
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+
+        read += chunk.value.byteLength;
+        if (read > this.maxBytes) return null;
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+    }
+
+    return text + decoder.decode();
+  }
+
   private async send(url: string, headers: Record<string, string>): Promise<Response | null> {
     try {
-      return await this.fetchImpl(url, { headers: { 'user-agent': this.userAgent, ...headers } });
+      return await this.fetchImpl(url, {
+        headers: { 'user-agent': this.userAgent, ...headers },
+        // Without this the read inherits Node's own five minute phase timeouts, and four attempts
+        // at five minutes outlive any request this run is answering.
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
     } catch {
       return null;
     }

@@ -43,6 +43,32 @@ describe('npm registry client', () => {
     expect(githubRepoFrom(url)).toEqual(expected);
   });
 
+  /**
+   * This field is written by whoever published the package, and what comes out of it is pasted
+   * into an api.github.com path that this service's token is sent with. `..` on both sides walks
+   * back out of `/repos/`, so the call would land wherever the package author pointed it.
+   */
+  const craftedRepoUrls = [
+    'https://github.com/../../user/repos',
+    'https://github.com/..%2f..%2fuser/repos',
+    'https://github.com/expressjs?x=/express',
+    'https://github.com/expressjs#/express',
+    'https://github.com/-leading-dash/express',
+    `https://github.com/${'a'.repeat(60)}/express`,
+    'https://github.com/expressjs/..',
+  ];
+
+  it.each(craftedRepoUrls)('refuses %s rather than aiming a call with it', (url) => {
+    expect(githubRepoFrom(url)).toBeNull();
+  });
+
+  it('keeps every character GitHub itself allows in a name', () => {
+    expect(githubRepoFrom('https://github.com/Some-Org/my_repo.js')).toEqual({
+      owner: 'Some-Org',
+      repo: 'my_repo.js',
+    });
+  });
+
   it('picks the highest stable version above the installed one', () => {
     const packument = {
       name: 'demo',

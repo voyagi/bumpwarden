@@ -25,6 +25,21 @@ export interface Packument {
 }
 
 /**
+ * What GitHub itself allows in an account or repository name. The pair parsed below is pasted
+ * into an api.github.com path, and the field it came from is written by whoever published the
+ * package: `..` on both sides walks the path back out of `/repos/` and aims the call, carrying
+ * this service's token, at an endpoint the package author chose.
+ */
+const GITHUB_OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+const GITHUB_REPO = /^[A-Za-z0-9_.-]{1,100}$/;
+
+function namedRepository(owner: string, repo: string): { owner: string; repo: string } | null {
+  if (!GITHUB_OWNER.test(owner)) return null;
+  if (!GITHUB_REPO.test(repo) || repo === '.' || repo === '..') return null;
+  return { owner, repo };
+}
+
+/**
  * Registry repository fields are written half a dozen ways (git+ssh, git+https, a bare shorthand),
  * and only the owner and repo are ever needed, so everything else is discarded rather than parsed.
  */
@@ -32,7 +47,7 @@ export function githubRepoFrom(url: string | null): { owner: string; repo: strin
   if (!url) return null;
   const match = /github\.com[/:]([^/]+)\/([^/#?]+?)(?:\.git)?(?:[/#?]|$)/i.exec(url);
   if (!match) return null;
-  return { owner: match[1] as string, repo: match[2] as string };
+  return namedRepository(match[1] ?? '', match[2] ?? '');
 }
 
 export interface Candidate {

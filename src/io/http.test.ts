@@ -148,4 +148,86 @@ describe('RunFetcher', () => {
       value: { a: 1 },
     });
   });
+
+  /**
+   * A run answers inside one request that has a deadline, and every source it reads belongs to
+   * somebody else. Both limits are about what an unhelpful source can cost, not about what a
+   * healthy one needs.
+   */
+  it('gives every call a deadline of its own rather than waiting on the far end', async () => {
+    const seen: (AbortSignal | null | undefined)[] = [];
+    const fetcher = new RunFetcher({
+      fetchImpl: async (_url, init) => {
+        seen.push(init?.signal);
+        return new Response('ok', { status: 200 });
+      },
+      sleep: noSleep,
+      timeoutMs: 1_000,
+    });
+
+    await fetcher.getText('https://example.test/slow');
+    expect(seen[0]).toBeInstanceOf(AbortSignal);
+  });
+
+  it('gives up on a call that never answers instead of holding the run open', async () => {
+    const fetcher = new RunFetcher({
+      fetchImpl: (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+      sleep: noSleep,
+      maxRetries: 0,
+      timeoutMs: 30,
+    });
+
+    expect(await fetcher.getText('https://example.test/hang')).toMatchObject({
+      ok: false,
+      reason: 'unavailable',
+    });
+  });
+
+  it('refuses a body over the cap rather than holding it all in memory', async () => {
+    const fetcher = new RunFetcher({
+      fetchImpl: async () => new Response('x'.repeat(4_000), { status: 200 }),
+      sleep: noSleep,
+      maxBytes: 1_000,
+    });
+
+    expect(await fetcher.getText('https://example.test/huge')).toMatchObject({
+      ok: false,
+      reason: 'malformed',
+    });
+  });
+
+  it('refuses on a declared length over the cap without reading a byte', async () => {
+    let read = false;
+    const fetcher = new RunFetcher({
+      fetchImpl: async () => {
+        read = true;
+        return new Response('small', {
+          status: 200,
+          headers: { 'content-length': String(50 * 1024 * 1024) },
+        });
+      },
+      sleep: noSleep,
+      maxBytes: 1_000,
+    });
+
+    expect(await fetcher.getText('https://example.test/liar')).toMatchObject({ ok: false });
+    expect(read).toBe(true);
+  });
+
+  it('reads a body under the cap whole, multibyte characters included', async () => {
+    const body = `${'a'.repeat(500)}éé`;
+    const fetcher = new RunFetcher({
+      fetchImpl: async () => new Response(body, { status: 200 }),
+      sleep: noSleep,
+      maxBytes: 1_000,
+    });
+
+    expect(await fetcher.getText('https://example.test/ok')).toMatchObject({
+      ok: true,
+      value: body,
+    });
+  });
 });
