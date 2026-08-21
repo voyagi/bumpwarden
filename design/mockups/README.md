@@ -1,8 +1,10 @@
 # Mockups
 
 All six pages, built to [../ART-DIRECTION.md](../ART-DIRECTION.md). Open any `.html` directly or
-serve the folder. They share `bumpwarden.css`, which is the design system the app itself uses:
-change a token there and every page follows.
+serve the folder. They share [../../public/bumpwarden.css](../../public/bumpwarden.css), which is
+the one design system the running app serves as well: change a token there and every page follows,
+mockup and product alike. The two typefaces are served from that same folder, so neither a mockup
+nor a page view reaches a third party.
 
 The content is real. Package names, versions and publish dates come from the npm registry, and the
 Express 5 quotes come from the
