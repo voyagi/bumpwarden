@@ -31,6 +31,15 @@ export const PER_RUN_BUDGETS = {
 } as const;
 
 /**
+ * The wall clock a run may spend before it stops asking for briefs. A count is not a bound while the
+ * time each item takes is set by someone else's service: twenty briefs at a slow minute each would
+ * outlast any request deadline, and a run killed mid-flight leaves a record that says "running"
+ * forever. Ten minutes sits inside the fifteen the deploy instructions give Cloud Run, which leaves
+ * the remaining actions and writes room to finish.
+ */
+export const RUN_TIME_BUDGET_SECONDS = 600;
+
+/**
  * The one sentence a green bump's pull request and the Policy page must agree on. bumpwarden edits
  * the manifest and stops: running someone else's package manager against their lockfile is a build
  * bumpwarden cannot verify, so it does not pretend to.

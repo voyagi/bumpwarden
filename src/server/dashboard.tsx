@@ -13,6 +13,7 @@ import { RUBRIC_VERSION } from '../core/rubric.js';
 import { nextScheduledRun } from '../core/schedule.js';
 import { BRIEF_MODEL, CLOUD_REGION, NODE_MAJOR } from '../core/stack.js';
 import type { Band } from '../core/types.js';
+import { log } from '../io/log.js';
 import type { BumpwardenStore } from '../io/store.js';
 import { RUN_LOOKBACK, REFUSAL_STATUS, runNowStatus } from './run-now.js';
 import type { StartRun } from './start-run.js';
@@ -111,7 +112,11 @@ function failed(c: Context, baseUrl: string | null | undefined, error: Error) {
   const canonical = `${origin(c, baseUrl)}${new URL(c.req.url).pathname}`;
   // Logged in full, shown as a sentence: a stack trace on a public dashboard tells a stranger more
   // about the deployment than it tells the operator, who has the logs.
-  console.error(`bumpwarden: ${c.req.method} ${new URL(c.req.url).pathname} failed`, error);
+  log.error('page failed', {
+    method: c.req.method,
+    path: new URL(c.req.url).pathname,
+    error,
+  });
   c.header('Cache-Control', 'no-store');
   return c.html(
     html`<!doctype html>${Shell({

@@ -3,7 +3,13 @@ import type { BriefRequest } from '../agent/prompt.js';
 import { briefCacheKey, unavailableBrief, type BriefRecord } from '../core/brief.js';
 import { bumpKey } from '../core/bump-key.js';
 import { bumpTitle, type BumpSummary } from '../core/issue-body.js';
-import { LABEL_ROOT, PER_RUN_BUDGETS, POLICY_VERSION, ruleFor } from '../core/policy.js';
+import {
+  LABEL_ROOT,
+  PER_RUN_BUDGETS,
+  POLICY_VERSION,
+  RUN_TIME_BUDGET_SECONDS,
+  ruleFor,
+} from '../core/policy.js';
 import {
   ZERO_COUNTS,
   actionIdFor,
@@ -25,6 +31,7 @@ import type { CandidateBump, MissingSource, Score } from '../core/types.js';
 import type { RepositoryActor } from '../io/github-actor.js';
 import type { RepoRef } from '../io/github.js';
 import type { RunFetcher } from '../io/http.js';
+import { silentLogger, type Logger } from '../io/log.js';
 import type { BumpwardenStore } from '../io/store.js';
 import { actOnBump, type ActContext } from './act.js';
 import { ingestRepository } from './ingest.js';
@@ -65,6 +72,8 @@ export interface RunDependencies {
   engine: BriefEngine | null;
   githubToken: string | null;
   dashboardBaseUrl: string | null;
+  /** Left out by tests, which have no use for the line the deployed service writes per run. */
+  logger?: Logger;
 }
 
 function summaryOf(repository: WatchedRepository, candidate: CandidateBump): BumpSummary {
@@ -115,13 +124,11 @@ function noBrief(request: BriefRequest, at: Date, model: string, reason: string)
 async function briefFor(
   deps: RunDependencies,
   request: BriefRequest,
-  withinBudget: boolean,
+  refusal: string | null,
   at: Date,
 ): Promise<BriefRecord> {
   if (!deps.engine) return noBrief(request, at, 'none', 'no Gemini API key is configured');
-  if (!withinBudget) {
-    return noBrief(request, at, deps.engine.model, 'over the per-run brief budget');
-  }
+  if (refusal) return noBrief(request, at, deps.engine.model, refusal);
 
   return writeBrief(request, {
     engine: deps.engine,
@@ -214,7 +221,7 @@ async function processBump(
   repository: WatchedRepository,
   context: ActContext,
   scored: { candidate: CandidateBump; score: Score },
-  budgets: { brief: boolean; action: boolean },
+  budgets: { brief: string | null; action: boolean },
 ): Promise<ProcessedBump> {
   const at = context.at;
   const bump = summaryOf(repository, scored.candidate);
@@ -244,13 +251,26 @@ async function processBump(
   };
 }
 
+/**
+ * Why a bump gets no brief, or null when it should get one. Both limits are published, and both are
+ * refusals rather than failures: the bump is still scored, still acted on, and the reason is stored
+ * on the record so the page says which limit was reached.
+ */
+function briefRefusal(index: number, budget: number, overtime: boolean): string | null {
+  if (index >= budget) return 'over the per-run brief budget';
+  if (overtime) return `over the per-run time budget of ${RUN_TIME_BUDGET_SECONDS} seconds`;
+  return null;
+}
+
 async function runRepository(
   deps: RunDependencies,
   options: RunOptions,
   repository: WatchedRepository,
   runId: string,
   at: Date,
+  deadline: number,
 ): Promise<RepositoryResult> {
+  const logger = deps.logger ?? silentLogger;
   const fetcher = deps.createFetcher();
   const target: RepoRef = { owner: repository.owner, repo: repository.repo, ref: repository.ref };
   const missing: MissingSource[] = [];
@@ -275,12 +295,22 @@ async function runRepository(
 
   for (const [index, entry] of scored.entries()) {
     const processed = await processBump(deps, repository, context, entry, {
-      brief: index < briefBudget,
+      brief: briefRefusal(index, briefBudget, deps.now().getTime() >= deadline),
       action: index < actionBudget,
     });
     await deps.store.appendAction(processed.action);
     await deps.store.saveBump(processed.record);
     if (LANDED.has(processed.action.outcome)) actions += 1;
+
+    logger.info('bump handled', {
+      runId,
+      bump: processed.record.key,
+      score: processed.record.score.total,
+      band: processed.record.score.band,
+      rule: processed.action.ruleId,
+      outcome: processed.action.outcome,
+      url: processed.action.url,
+    });
   }
 
   const counts = countBands(scored.map((entry) => entry.score.band));
@@ -316,6 +346,7 @@ async function runRepository(
  * artifact the nightly run produces.
  */
 export async function executeRun(deps: RunDependencies, options: RunOptions): Promise<RunRecord> {
+  const logger = deps.logger ?? silentLogger;
   const startedAt = deps.now();
   const id = runIdFor(startedAt, options.trigger);
 
@@ -342,12 +373,22 @@ export async function executeRun(deps: RunDependencies, options: RunOptions): Pr
   // Written before any work so a dashboard poll during a long run sees a running run rather than
   // nothing at all.
   await deps.store.saveRun(opened);
+  logger.info('run started', {
+    runId: id,
+    trigger: options.trigger,
+    scope: opened.scope,
+    repositories: repositories.length,
+    rubricVersion: RUBRIC_VERSION,
+    policyVersion: POLICY_VERSION,
+  });
 
+  const deadline = startedAt.getTime() + RUN_TIME_BUDGET_SECONDS * 1000;
   const results: RepositoryResult[] = [];
   for (const repository of repositories) {
     try {
-      results.push(await runRepository(deps, options, repository, id, deps.now()));
+      results.push(await runRepository(deps, options, repository, id, deps.now(), deadline));
     } catch (error) {
+      logger.error('repository failed', { runId: id, repository: repository.id, error });
       results.push({
         repositoryId: repository.id,
         dependenciesConsidered: 0,
@@ -370,5 +411,13 @@ export async function executeRun(deps: RunDependencies, options: RunOptions): Pr
   };
 
   await deps.store.saveRun(finished);
+  logger.info('run finished', {
+    runId: id,
+    counts: summary.counts,
+    actionsTaken: summary.actions,
+    seconds: Math.round(
+      (new Date(finished.finishedAt as string).getTime() - startedAt.getTime()) / 1000,
+    ),
+  });
   return finished;
 }

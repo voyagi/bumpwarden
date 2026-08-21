@@ -1,6 +1,6 @@
 import { rm, writeFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LOCKFILE_POLICY, PER_RUN_BUDGETS } from '../core/policy.js';
+import { LOCKFILE_POLICY, PER_RUN_BUDGETS, RUN_TIME_BUDGET_SECONDS } from '../core/policy.js';
 import type { BumpRecord, WatchedRepository } from '../core/records.js';
 import { bumpPath, projectPath } from '../core/routes.js';
 import { PUBLISHED_RUBRIC, RUBRIC_VERSION } from '../core/rubric.js';
@@ -230,6 +230,7 @@ describe('the published policy', () => {
     const body = await text(store, '/rubric');
     expect(body).toContain(`At most ${PER_RUN_BUDGETS.actions} actions in a run`);
     expect(body).toContain(`at most ${PER_RUN_BUDGETS.briefs} briefs`);
+    expect(body).toContain(`after ${RUN_TIME_BUDGET_SECONDS / 60} minutes`);
     expect(body).toContain('riskiest first');
   });
 
@@ -304,16 +305,23 @@ describe('every page', () => {
     vi.spyOn(broken, 'listProjectSummaries').mockRejectedValue(
       new Error('firestore: PERMISSION_DENIED on project bumpwarden-prod'),
     );
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const written = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
     const response = await app(broken).request('http://local/');
     const body = await response.text();
+    const logged = written.mock.calls.map(([line]) => String(line)).join('');
+    written.mockRestore();
 
     expect(response.status).toBe(500);
     expect(body).toContain('This page could not be built.');
     expect(body).not.toContain('PERMISSION_DENIED');
-    expect(errors).toHaveBeenCalled();
-    errors.mockRestore();
+    // The operator gets the reason, the visitor gets a sentence.
+    expect(JSON.parse(logged)).toMatchObject({
+      severity: 'ERROR',
+      message: 'page failed',
+      path: '/',
+      error: { message: 'firestore: PERMISSION_DENIED on project bumpwarden-prod' },
+    });
   });
 });
 

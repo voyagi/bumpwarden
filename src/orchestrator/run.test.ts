@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BriefEngine } from '../agent/write-brief.js';
-import { PER_RUN_BUDGETS } from '../core/policy.js';
+import { PER_RUN_BUDGETS, RUN_TIME_BUDGET_SECONDS } from '../core/policy.js';
 import type { RunRecord } from '../core/records.js';
 import { RepositoryActor } from '../io/github-actor.js';
 import { RunFetcher } from '../io/http.js';
+import { createLogger } from '../io/log.js';
 import { MemoryStore } from '../io/memory-store.js';
 import type { BumpwardenStore } from '../io/store.js';
 import { fakeGitHub, type FakeGitHub } from '../testkit/fake-github.js';
@@ -205,6 +206,46 @@ describe('one run over one repository', () => {
     expect(bump?.brief.status).toBe('ready');
     expect(bump?.brief.content?.breaksHere[0]?.verified).toBe(true);
     expect(bump?.action?.outcome).toBe('opened');
+  });
+
+  it('stops asking for briefs once the run is out of time, and still scores and acts', async () => {
+    const context = await harness();
+    // Two calls open the run and the repository; every call after them lands past the budget, which
+    // is the shape of a run whose first briefs were slow.
+    let calls = 0;
+    context.deps.now = () => {
+      calls += 1;
+      const overtime = calls > 2 ? RUN_TIME_BUDGET_SECONDS * 1000 + 1_000 : 0;
+      return new Date(NOW.getTime() + overtime);
+    };
+
+    await executeRun(context.deps, { trigger: 'scheduled' });
+
+    const [bump] = await context.store.listBumps({ repositoryId: DEMO.id, limit: 10 });
+    expect(bump?.brief.status).toBe('unavailable');
+    expect(bump?.brief.reason).toContain('time budget');
+    expect(bump?.score.band).toBe('red');
+    expect(bump?.action?.outcome).toBe('opened');
+    expect(context.engine.seen).toBe(0);
+  });
+
+  it('narrates the run as structured lines that carry no credential', async () => {
+    const lines: string[] = [];
+    const context = await harness({
+      logger: createLogger({ write: (line) => lines.push(line) }),
+      githubToken: `ghp_${'B7c2D9e1F3'.repeat(4)}`,
+    });
+    await executeRun(context.deps, { trigger: 'scheduled' });
+
+    const entries = lines.map((line) => JSON.parse(line));
+    expect(entries.map((entry) => entry.message)).toEqual([
+      'run started',
+      'bump handled',
+      'run finished',
+    ]);
+    expect(entries[1]).toMatchObject({ band: 'red', rule: 'RED-HOLD-1', outcome: 'opened' });
+    expect(entries[2]).toMatchObject({ counts: { green: 0, amber: 0, red: 1 }, actionsTaken: 1 });
+    expect(lines.join('\n')).not.toContain('ghp_');
   });
 
   it('writes the audit entry with the rule that fired and the issue URL', async () => {

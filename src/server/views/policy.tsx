@@ -4,6 +4,7 @@ import {
   PER_RUN_BUDGETS,
   POLICY_RULES,
   POLICY_VERSION,
+  RUN_TIME_BUDGET_SECONDS,
 } from '../../core/policy.js';
 import { BAND_RANGES, PUBLISHED_RUBRIC, RUBRIC_VERSION } from '../../core/rubric.js';
 import type { Band } from '../../core/types.js';
@@ -94,7 +95,10 @@ export function PolicyPage(): JSX.Element {
             <p style="margin-bottom:0">
               A first run over a long neglected repository would otherwise open dozens of issues at
               once, which is how a useful bot becomes one a maintainer blocks. The same run writes
-              at most {PER_RUN_BUDGETS.briefs} briefs.
+              at most {PER_RUN_BUDGETS.briefs} briefs, and stops asking for them after{' '}
+              {RUN_TIME_BUDGET_SECONDS / 60} minutes so a slow answer upstream cannot push a run
+              past its deadline. A bump that misses out is still scored and still acted on, and its
+              page says which limit it met.
             </p>
           </div>
 
