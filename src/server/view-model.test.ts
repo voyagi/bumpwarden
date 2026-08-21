@@ -11,7 +11,7 @@ import {
   durationWords,
   elapsedSeconds,
   factorWidth,
-  laneClass,
+  placePins,
   queueSentence,
   splitEvidence,
   topFactorSentence,
@@ -55,7 +55,60 @@ describe('marks', () => {
   });
 
   it('alternates lanes so neighbouring labels never share a row', () => {
-    expect([0, 1, 2, 3].map(laneClass)).toEqual(['lane-a', 'lane-b', 'lane-a', 'lane-b']);
+    const spread = placePins([
+      { label: 'a', total: 0 },
+      { label: 'b', total: 40 },
+      { label: 'c', total: 80 },
+    ]);
+    expect(spread.map((entry) => entry.lane)).toEqual(['lane-a', 'lane-b', 'lane-a']);
+    expect(spread.every((entry) => entry.labelled)).toBe(true);
+  });
+
+  /**
+   * The measurement that matters, done the way the browser does it rather than by counting pins:
+   * two labels in the same lane must not share a millimetre of the axis. A real run of 37 bumps is
+   * what broke the index-alternating version, so that is the shape this is measured on.
+   */
+  it('never lets two labels in one lane overlap, however crowded the run', () => {
+    const crowded = Array.from({ length: 37 }, (_, index) => ({
+      label: `@typescript-eslint/package-${index}`,
+      total: 30 + index,
+    }));
+
+    const spread = placePins(crowded);
+    const labelled = spread.filter((entry) => entry.labelled);
+
+    for (const lane of ['lane-a', 'lane-b'] as const) {
+      const spans = labelled
+        .filter((entry) => entry.lane === lane)
+        .map((entry) => {
+          const half = (1.4 + entry.pin.label.length * 0.72) / 2;
+          return [entry.pin.total - half, entry.pin.total + half] as const;
+        })
+        .sort((left, right) => left[0] - right[0]);
+
+      for (let index = 1; index < spans.length; index += 1) {
+        expect(spans[index]?.[0]).toBeGreaterThanOrEqual(spans[index - 1]?.[1] ?? 0);
+      }
+    }
+
+    expect(labelled.length).toBeGreaterThan(0);
+    expect(spread).toHaveLength(37);
+  });
+
+  /** The worst bump is the one a reader came for, so it is the one that never loses its name. */
+  it('keeps the highest score labelled when the axis runs out of room', () => {
+    const crowded = Array.from({ length: 20 }, (_, index) => ({
+      label: `dependency-number-${index}`,
+      total: 60 + index * 0.5,
+    }));
+
+    const spread = placePins(crowded);
+    const worst = spread[spread.length - 1];
+
+    expect(worst?.pin.total).toBe(69.5);
+    expect(worst?.labelled).toBe(true);
+    expect(spread.filter((entry) => entry.labelled).length).toBeLessThan(20);
   });
 });
 

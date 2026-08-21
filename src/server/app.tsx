@@ -30,7 +30,15 @@ function shutRunAuth(): RunAuthConfig {
 
 /** Hashed names would let these be immutable; without them a week is the honest ceiling. */
 const ASSET_CACHE = 'public, max-age=604800';
-const STYLE_CACHE = 'public, max-age=3600';
+
+/**
+ * The two files that change with the code, under names that do not. An hour here meant a browser
+ * that had visited before kept serving the previous stylesheet against the new markup for an hour
+ * after a deploy, which is a page that looks broken for a reason nothing on it explains. A minute
+ * still spares a reader the 22 KB on every click and puts a redeploy on screen while the person who
+ * ran it is still looking.
+ */
+const CODE_CACHE = 'public, max-age=60';
 
 /**
  * A dotfile under a static root is a file nobody chose to publish: an editor's leavings, a local
@@ -43,24 +51,24 @@ async function refuseDotfiles(c: Context, next: Next): Promise<Response | undefi
   return undefined;
 }
 
+/**
+ * Set on the way out rather than through serveStatic's own `onFound`, which answers the file but
+ * never runs the callback outside a node server, so the lifetime of a cached asset was a thing no
+ * test could see. A miss is left alone: nothing should cache a 404 for a week.
+ */
+function caching(value: string) {
+  return async (c: Context, next: Next): Promise<void> => {
+    await next();
+    if (c.res.ok) c.res.headers.set('Cache-Control', value);
+  };
+}
+
 function mountAssets(app: Hono): void {
   app.use('/fonts/*', refuseDotfiles);
-  app.use(
-    '/fonts/*',
-    serveStatic({ root: './public', onFound: (_p, c) => c.header('Cache-Control', ASSET_CACHE) }),
-  );
-  app.use(
-    '/bumpwarden.css',
-    serveStatic({ root: './public', onFound: (_p, c) => c.header('Cache-Control', STYLE_CACHE) }),
-  );
-  app.use(
-    '/run-now.js',
-    serveStatic({ root: './public', onFound: (_p, c) => c.header('Cache-Control', STYLE_CACHE) }),
-  );
-  app.use(
-    '/favicon.svg',
-    serveStatic({ root: './public', onFound: (_p, c) => c.header('Cache-Control', ASSET_CACHE) }),
-  );
+  app.use('/fonts/*', caching(ASSET_CACHE), serveStatic({ root: './public' }));
+  app.use('/bumpwarden.css', caching(CODE_CACHE), serveStatic({ root: './public' }));
+  app.use('/run-now.js', caching(CODE_CACHE), serveStatic({ root: './public' }));
+  app.use('/favicon.svg', caching(ASSET_CACHE), serveStatic({ root: './public' }));
 }
 
 /**

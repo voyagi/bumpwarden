@@ -48,12 +48,18 @@ function ProjectRow(props: { project: ProjectSummary; index: number }): JSX.Elem
         )}
       </span>
       <span class="wy">{queueSentence(project.counts)}</span>
-      <ScoreMark
-        total={project.worstScore}
-        band={worstBand(project.counts)}
-        index={props.index}
-        word="Worst"
-      />
+      {totalBumps(project.counts) === 0 ? (
+        // A zero drawn on the ramp reads as a score of zero, which is a very different claim from
+        // a repository that has nothing pending to place on the scale at all.
+        <span class="g idle">nothing to place</span>
+      ) : (
+        <ScoreMark
+          total={project.worstScore}
+          band={worstBand(project.counts)}
+          index={props.index}
+          word="Worst"
+        />
+      )}
     </div>
   );
 }
@@ -78,8 +84,8 @@ function LatestActions(props: { actions: ActionRecord[] }): JSX.Element {
         {props.actions.map((action, index) => (
           <div key={action.id} class={action.score > 0 ? 'f' : 'f z'}>
             <span>
-              {action.detail.charAt(0).toUpperCase() + action.detail.slice(1)} &#183;{' '}
-              {action.bumpTitle}
+              <span class="lead">{action.bumpTitle}</span> &#183;{' '}
+              {action.detail.charAt(0).toUpperCase() + action.detail.slice(1)}
             </span>
             <b>{action.score}</b>
             <i

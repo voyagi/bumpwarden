@@ -414,7 +414,10 @@ h1 {
 .foot {
   margin: 0 34px 64px;
   display: grid;
-  grid-template-columns: 1fr 330px;
+  /* The arithmetic column carries sixteen factor rows, each a label, a number and a bar. Pinned at
+     330px every long evidence string wrapped to five lines while the wide screen it was on had room
+     to spare, so the column takes a share of a large viewport and keeps 330px as its floor. */
+  grid-template-columns: minmax(0, 1fr) minmax(330px, 0.42fr);
   gap: 26px;
   align-items: start;
 }
@@ -506,9 +509,24 @@ a.plain {
   height: 7px;
   border-radius: 3px;
 }
+/* The bump is what a reader scans this list for, so it leads the line and the reason follows it. */
+.fall .f .lead {
+  color: var(--ink);
+  font-weight: 600;
+}
 .fall .z span,
 .fall .z b {
   color: var(--ink-3);
+}
+.fall .z .lead {
+  color: var(--ink-2);
+}
+/* A repository with nothing pending has no worst reading to place, and a zero drawn on the ramp
+   would read as a score rather than as the absence of one. */
+.g.idle {
+  font-size: 12px;
+  color: var(--ink-3);
+  justify-content: flex-end;
 }
 .total {
   display: flex;

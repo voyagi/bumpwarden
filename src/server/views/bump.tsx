@@ -64,18 +64,21 @@ function Explanation(props: { text: string }): JSX.Element {
 
 function Provenance(props: { brief: BriefRecord }): JSX.Element {
   const { brief } = props;
-  const content = brief.content;
-  const verified = (content?.breaksHere ?? []).filter((claim) => claim.verified).length;
-  const dropped =
-    brief.droppedClaims === 0
-      ? 'none dropped'
-      : `${brief.droppedClaims} dropped as unquotable from the material`;
+  const claims = brief.content?.breaksHere ?? [];
+  const verified = claims.filter((claim) => claim.verified).length;
 
   return (
     <p class="c2" style="margin-top:18px">
-      Confidence {content?.confidence ?? 'unknown'}. Model {brief.model}. {verified} of{' '}
-      {content?.breaksHere.length ?? 0} claims matched a call site the mechanical matcher also
-      found, {dropped}.
+      Confidence {brief.content?.confidence ?? 'unknown'}. Model {brief.model}.{' '}
+      {claims.length === 0
+        ? 'It named no call site in this repository.'
+        : `${verified} of ${claims.length} claims matched a call site the mechanical matcher also found.`}
+      {/* Zero dropped is worth saying only where claims were made: it is the sentence that tells a
+          reader nothing was quietly removed between the model and the page. */}
+      {claims.length > 0 && brief.droppedClaims === 0 ? ' None were dropped.' : ''}
+      {brief.droppedClaims > 0
+        ? ` ${brief.droppedClaims} more were dropped as unquotable from the material.`
+        : ''}
       {brief.truncated ? ' Some inputs were truncated to fit the token budget.' : ''}
     </p>
   );

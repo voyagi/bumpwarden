@@ -5,7 +5,7 @@ import {
   THRESHOLD_MARKS,
   WORD_COLOR,
   factorWidth,
-  laneClass,
+  placePins,
   splitEvidence,
   trackWidth,
   verdictWord,
@@ -75,7 +75,7 @@ export interface SpreadProps {
  * measurement squashed until its labels collide has stopped being a measurement.
  */
 export function Spread(props: SpreadProps): JSX.Element {
-  const ordered = [...props.pins].sort((left, right) => left.total - right.total);
+  const placed = placePins(props.pins);
 
   return (
     <section class="spread">
@@ -89,14 +89,15 @@ export function Spread(props: SpreadProps): JSX.Element {
               <span>{mark}</span>
             </div>
           ))}
-          {ordered.map((pin, index) => (
+          {placed.map(({ pin, lane, labelled }, index) => (
             <div
               key={`${pin.label}-${pin.total}`}
-              class={`pin ${laneClass(index)}`}
+              class={`pin ${lane}`}
               style={`left:${pin.total}%`}
+              title={`${pin.label}, scored ${pin.total}`}
             >
               <i style={`background:${MARK_COLOR[pin.band]};${delay(index)}`} />
-              <b>{pin.label}</b>
+              <b class={labelled ? undefined : 'sr-only'}>{pin.label}</b>
             </div>
           ))}
         </div>

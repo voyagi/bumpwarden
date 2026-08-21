@@ -50,9 +50,52 @@ export function factorWidth(points: number): string {
   return `${Math.round((points / LARGEST_FACTOR) * 1000) / 10}%`;
 }
 
-/** Pins alternate lanes so two labels close together on the axis never sit on top of each other. */
-export function laneClass(index: number): string {
-  return index % 2 === 0 ? 'lane-a' : 'lane-b';
+/**
+ * Room one label needs on a 0 to 100 axis, measured against the narrowest the axis is ever drawn
+ * (900px, the width it scrolls at on a phone), so a label that fits here fits at every width. The
+ * per-character figure is JetBrains Mono at 10.5px, which is where the label sits.
+ */
+const LABEL_CHAR_PERCENT = 0.72;
+const LABEL_PAD_PERCENT = 1.4;
+
+export interface PlacedPin<T> {
+  pin: T;
+  lane: 'lane-a' | 'lane-b';
+  /** False when the label would land on one already claimed in the same lane. */
+  labelled: boolean;
+}
+
+/**
+ * Two lanes are not enough on their own: alternating by index says nothing about distance, so a run
+ * of 37 bumps piles a dozen labels into the same few percent and the axis stops being readable at
+ * exactly the moment it has the most to say. Labels are claimed from the worst score down, so the
+ * pin a reader most needs named is the one that always keeps its label, and a label with no room
+ * left is dropped rather than drawn over its neighbour. The pin itself always stays: the shape of
+ * the run is what the axis is for, and every dropped label is still on the pin for a screen reader
+ * and under the pointer.
+ */
+export function placePins<T extends { label: string; total: number }>(pins: T[]): PlacedPin<T>[] {
+  const placed: PlacedPin<T>[] = [...pins]
+    .sort((left, right) => left.total - right.total)
+    .map((pin, index) => ({ pin, lane: index % 2 === 0 ? 'lane-a' : 'lane-b', labelled: false }));
+
+  const claimed: Record<string, Array<[number, number]>> = { 'lane-a': [], 'lane-b': [] };
+
+  for (let index = placed.length - 1; index >= 0; index -= 1) {
+    const entry = placed[index];
+    if (!entry) continue;
+
+    const half = (LABEL_PAD_PERCENT + entry.pin.label.length * LABEL_CHAR_PERCENT) / 2;
+    const from = entry.pin.total - half;
+    const to = entry.pin.total + half;
+    const lane = claimed[entry.lane] ?? [];
+
+    if (lane.some(([start, end]) => from < end && to > start)) continue;
+    lane.push([from, to]);
+    entry.labelled = true;
+  }
+
+  return placed;
 }
 
 export function queueSentence(counts: BandCounts): string {

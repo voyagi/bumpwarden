@@ -54,6 +54,26 @@ describe('what every response carries', () => {
     expect(headers.get('strict-transport-security')).toContain('max-age=31536000');
   });
 
+  /**
+   * The stylesheet and the run script ship under names that never change, so their cache lifetime
+   * is exactly how long a returning reader keeps the previous deploy. A minute is the compromise;
+   * an hour was what hid a stylesheet change from a browser that had been on the page before. The
+   * fonts and the favicon do not change with the code and keep the week.
+   */
+  it('lets a deploy reach a returning reader within a minute', async () => {
+    for (const path of ['/bumpwarden.css', '/run-now.js']) {
+      const res = await app.request(path);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('cache-control'), path).toBe('public, max-age=60');
+    }
+
+    for (const path of ['/favicon.svg', '/fonts/mona-sans-latin.woff2']) {
+      const res = await app.request(path);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('cache-control'), path).toBe('public, max-age=604800');
+    }
+  });
+
   it('carries them on the api answers and the assets too, not only on the pages', async () => {
     for (const path of ['/healthz', '/sitemap.xml', '/robots.txt', '/no-such-page']) {
       const headers = (await app.request(path)).headers;
