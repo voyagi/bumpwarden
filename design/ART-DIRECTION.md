@@ -1,5 +1,23 @@
 # bumpwarden art direction
 
+> **RETIRED 2026-08-21, the same day it was locked. Do not build pages from this document.**
+>
+> Set beside two earlier products, this direction turned out to be the same design three
+> times over: a mid-century industrial operations room, a dark saturated ground with a warm cream
+> reading surface and signal accents, and an interface pretending to be a physical panel holding
+> tokens. It also reads as dated, which is the same root cause rather than a second one.
+>
+> The research that should have driven it has since been done, against three products this
+> audience actually uses. Linear runs InterVariable on near-black `#08090a` with 5 to 8px radii and
+> a fine-grained size ladder. Sentry runs Rubik with a characterful display face reserved for the
+> brand layer. Aikido, the nearest category product, runs New Grotesk in five weights. In this
+> category the working surface is quiet, dense and fast, and the personality lives in the brand
+> layer. This document inverted that: it dressed the table people have to read every day in a
+> costume.
+>
+> The replacement is derived from that audience instead. Until it lands, no page code. This file is
+> kept rather than deleted so the reasoning survives and the mistake is not repeated.
+
 Locked 2026-08-21. Every page derives from this document. If a screen disagrees with this file,
 the screen is wrong.
 
