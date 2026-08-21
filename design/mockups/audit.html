@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bumpwarden - audit log</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wdth,wght@0,75..125,200..900&family=JetBrains+Mono:wght@100..800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="bumpwarden.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <a class="logo" href="home.html">bumpwarden</a>
+      <nav>
+        <a href="home.html">Home</a>
+        <a href="project.html">Queue</a>
+        <a href="audit.html" aria-current="page">Audit</a>
+        <a href="rubric.html">Rubric</a>
+        <a href="about.html">About</a>
+      </nav>
+      <span class="right">38 entries since 2026-08-20</span>
+    </header>
+
+    <section class="band">
+      <h1>Every action, and the rule that fired it.</h1>
+      <p class="lede">
+        One line per action, newest first, written only once the action succeeded. A run that
+        changed nothing still writes its own line, so a quiet day and a broken agent never look
+        alike.
+      </p>
+    </section>
+
+    <section class="list">
+      <div class="lh" style="grid-template-columns: 172px 190px 1fr 132px">
+        <span>Time, UTC</span><span>Bump</span><span>Action</span><span>Rule</span>
+      </div>
+
+      <div class="reg">
+        <span class="t">2026-08-21 06:04:11</span>
+        <span class="who">glob 8.1.0 to 13.0.6</span>
+        <span>Opened hold issue 41, labelled bumpwarden:hold</span>
+        <span><span class="chip">RED-HOLD-1</span></span>
+      </div>
+      <div class="reg">
+        <span class="t">2026-08-21 06:04:09</span>
+        <span class="who">chalk 4.1.2 to 6.0.0</span>
+        <span>Opened hold issue 40, labelled bumpwarden:hold</span>
+        <span><span class="chip">RED-HOLD-1</span></span>
+      </div>
+      <div class="reg">
+        <span class="t">2026-08-21 06:04:02</span>
+        <span class="who">commander 11.1.0 to 15.0.0</span>
+        <span>Opened hold issue 39, labelled bumpwarden:hold</span>
+        <span><span class="chip">RED-HOLD-1</span></span>
+      </div>
+      <div class="reg">
+        <span class="t">2026-08-21 06:03:58</span>
+        <span class="who">express 4.18.2 to 5.2.1</span>
+        <span>Updated hold issue 38, score unchanged at 62</span>
+        <span><span class="chip">RED-HOLD-1</span></span>
+      </div>
+      <div class="reg">
+        <span class="t">2026-08-21 06:03:44</span>
+        <span class="who">dotenv 16.4.5 to 17.4.2</span>
+        <span>Updated issue 35, checklist reissued</span>
+        <span><span class="chip">AMB-ISSUE-1</span></span>
+      </div>
+      <div class="reg">
+        <span class="t">2026-08-21 06:03:31</span>
+        <span class="who">node-fetch 2.7.0 to 3.3.2</span>
+        <span>Commented on the existing Dependabot pull request 29 instead of duplicating it</span>
+        <span><span class="chip">AMB-COMMENT-1</span></span>
+      </div>
+      <div class="reg">
+        <span class="t">2026-08-21 06:03:21</span>
+        <span class="who">zod 4.4.2 to 4.4.3</span>
+        <span>Opened pull request 33 with the bump and the brief</span>
+        <span><span class="chip">GRN-PR-1</span></span>
+      </div>
+      <div class="reg">
+        <span class="t">2026-08-21 06:03:04</span>
+        <span class="who">bumpwarden, whole run</span>
+        <span>Run finished. 2 bumps scored, no action needed</span>
+        <span><span class="chip">RUN-END</span></span>
+      </div>
+      <div class="reg">
+        <span class="t">2026-08-21 06:00:02</span>
+        <span class="who">all repositories</span>
+        <span>Run started, triggered by Cloud Scheduler, OIDC token verified</span>
+        <span><span class="chip">RUN-START</span></span>
+      </div>
+    </section>
+  </body>
+</html>

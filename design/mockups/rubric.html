@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bumpwarden - the rubric</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wdth,wght@0,75..125,200..900&family=JetBrains+Mono:wght@100..800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="bumpwarden.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <a class="logo" href="home.html">bumpwarden</a>
+      <nav>
+        <a href="home.html">Home</a>
+        <a href="project.html">Queue</a>
+        <a href="audit.html">Audit</a>
+        <a href="rubric.html" aria-current="page">Rubric</a>
+        <a href="about.html">About</a>
+      </nav>
+      <span class="right">v1.0.0 &middot; in force since 2026-08-20</span>
+    </header>
+
+    <section class="band">
+      <h1>The rubric, in force and unedited.</h1>
+      <p class="lede">
+        Every point below is awarded by code, from a source with a link. The model never adds,
+        removes or reweights a factor. When the rubric changes it gets a new version number, and old
+        scores keep the version they were computed under.
+      </p>
+    </section>
+
+    <section class="list">
+      <div class="lh" style="grid-template-columns: 1fr 190px 66px">
+        <span>Factor</span><span>Source</span><span>Points</span>
+      </div>
+
+      <div class="rub">
+        <span>Semver distance: patch</span><span class="s">npm registry</span
+        ><span class="p zero">0</span>
+      </div>
+      <div class="rub">
+        <span>Semver distance: minor</span><span class="s">npm registry</span
+        ><span class="p">8</span>
+      </div>
+      <div class="rub">
+        <span>Semver distance: major, plus 6 for each further major, capped at 45</span>
+        <span class="s">npm registry</span><span class="p">30</span>
+      </div>
+      <div class="rub">
+        <span>Candidate published less than 7 days ago</span><span class="s">npm registry time</span
+        ><span class="p">12</span>
+      </div>
+      <div class="rub">
+        <span>Candidate published 7 to 14 days ago</span><span class="s">npm registry time</span
+        ><span class="p">6</span>
+      </div>
+      <div class="rub">
+        <span>Advisory on the candidate: critical or high</span><span class="s">deps.dev, OSV</span
+        ><span class="p">25</span>
+      </div>
+      <div class="rub">
+        <span>Advisory on the candidate: moderate or low</span><span class="s">deps.dev, OSV</span
+        ><span class="p">12</span>
+      </div>
+      <div class="rub">
+        <span>Installed version is deprecated</span><span class="s">npm registry, deps.dev</span
+        ><span class="p">10</span>
+      </div>
+      <div class="rub">
+        <span>Candidate version is deprecated</span><span class="s">npm registry, deps.dev</span
+        ><span class="p">30</span>
+      </div>
+      <div class="rub">
+        <span>Explicit breaking marker in release notes or commit subjects</span
+        ><span class="s">GitHub releases, compare</span><span class="p">12</span>
+      </div>
+      <div class="rub">
+        <span>Softer removal wording: removed, dropped support</span
+        ><span class="s">GitHub releases, compare</span><span class="p">6</span>
+      </div>
+      <div class="rub">
+        <span>Engine range raised above the range your manifest declares</span
+        ><span class="s">package.json engines</span><span class="p">15</span>
+      </div>
+      <div class="rub">
+        <span>Peer dependency range changed</span><span class="s">npm registry</span
+        ><span class="p">8</span>
+      </div>
+      <div class="rub">
+        <span>Your code imports a symbol the release notes say changed</span
+        ><span class="s">your repository</span><span class="p">20</span>
+      </div>
+      <div class="rub">
+        <span>Your code imports the package but no changed symbol matched</span
+        ><span class="s">your repository</span><span class="p">8</span>
+      </div>
+      <div class="rub">
+        <span>Release notes for the candidate could not be read</span
+        ><span class="s">recorded as missing</span><span class="p">6</span>
+      </div>
+    </section>
+
+    <section class="wrap" style="margin-top: -30px">
+      <p class="panel-h">The action per band</p>
+      <div class="bands">
+        <div class="bandcard">
+          <span class="rng">0 to 30</span>
+          <h4 style="color: var(--r0)">Clear</h4>
+          <p>
+            Open a pull request with the bump and the brief. If Dependabot or Renovate already
+            opened one for the same bump, comment there instead of duplicating it.
+          </p>
+          <span class="rule-id">GRN-PR-1</span>
+        </div>
+        <div class="bandcard">
+          <span class="rng">31 to 60</span>
+          <h4 style="color: var(--r3)">Caution</h4>
+          <p>
+            Open an issue carrying the brief and a migration checklist, labelled bumpwarden:review.
+            No pull request.
+          </p>
+          <span class="rule-id">AMB-ISSUE-1</span>
+        </div>
+        <div class="bandcard">
+          <span class="rng">61 to 100</span>
+          <h4 style="color: var(--r4)">Held</h4>
+          <p>
+            Open a hold issue with a migration plan, labelled bumpwarden:hold. Never open a pull
+            request for a held bump.
+          </p>
+          <span class="rule-id">RED-HOLD-1</span>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 24px">
+        <p class="kick">Standing rule</p>
+        <h3>bumpwarden never merges</h3>
+        <p style="margin-bottom: 0">
+          Autonomy stops at the merge button by design. The agent opens, updates, labels and
+          explains. A person presses merge. There is no configuration flag that changes this,
+          because a flag that can be turned on is a promise that can be broken.
+        </p>
+      </div>
+    </section>
+  </body>
+</html>

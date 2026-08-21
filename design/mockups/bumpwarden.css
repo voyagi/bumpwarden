@@ -1,0 +1,722 @@
+/* bumpwarden design system. Derived from design/ART-DIRECTION.md.
+   THE COLOUR LAW: colour means risk. Nothing else in this product is coloured, so the only
+   saturated pixels on any screen belong to a score, a band, or a factor's contribution. */
+
+:root {
+  --bg: #fafaf9;
+  --panel: #ffffff;
+  --panel-2: #f7f8f8;
+  --ink: #14181b;
+  --ink-2: #5a6469;
+  /* Labels and axis annotations are small text, so this has to clear 4.5:1 rather than sit at the
+     3:1 a graphic gets away with. Measured 4.77:1 on panel. */
+  --ink-3: #6b747a;
+  --rule: #e6e8e7;
+  --rule-2: #f0f2f1;
+  --tick: #cdd3d1;
+
+  --r0: #0f766e;
+  --r1: #4d7c3f;
+  --r2: #b7791f;
+  --r3: #c2410c;
+  --r4: #b91c1c;
+
+  /* One family across the whole range, which is what every measured product does. Headlines take
+     the tight width and the heavy weight, rows take normal width. */
+  --display: 'Mona Sans', sans-serif;
+  --sans: 'Mona Sans', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1113;
+    --panel: #161a1d;
+    --panel-2: #1b2023;
+    --ink: #e8edf0;
+    --ink-2: #9aa5ab;
+    --ink-3: #8b959a; /* 5.72:1 on the dark panel */
+    --rule: #262c30;
+    --rule-2: #1d2225;
+    --tick: #394247;
+
+    /* The ramp lifts on a dark ground so every step still clears contrast. The meaning of each
+       step does not change, only its luminance. */
+    --r0: #2dd4a7;
+    --r1: #8fca6a;
+    --r2: #e0a83a;
+    --r3: #f2884a;
+    --r4: #f2706e;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- chrome ---------- */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 15px 34px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+}
+.logo {
+  font-family: var(--display);
+  font-weight: 800;
+  font-stretch: 88%;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  color: inherit;
+  text-decoration: none;
+}
+.bar nav {
+  display: flex;
+  gap: 20px;
+}
+.bar nav a {
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+.bar nav a:hover {
+  color: var(--ink);
+}
+.bar nav a[aria-current] {
+  color: var(--ink);
+  font-weight: 700;
+}
+.bar .right {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.band {
+  padding: 40px 34px 26px;
+}
+h1 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-stretch: 92%;
+  font-size: clamp(29px, 4vw, 46px);
+  letter-spacing: -0.028em;
+  line-height: 1.06;
+  margin: 0;
+  max-width: 21ch;
+}
+.lede {
+  margin: 14px 0 0;
+  color: var(--ink-2);
+  font-size: 16.5px;
+  max-width: 62ch;
+}
+.crumb {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin: 0 0 12px;
+}
+
+/* Monochrome on purpose. A coloured button would teach the eye that colour is decoration, and in
+   this product colour only ever means risk. */
+.btn {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 14px;
+  background: var(--ink);
+  color: var(--bg);
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.btn:hover {
+  opacity: 0.86;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ---------- the spread: the whole run on one shared axis ---------- */
+
+.spread {
+  margin: 26px 34px 0;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 22px 30px 12px;
+}
+.spread h2,
+.panel-h {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0 0 8px;
+  color: var(--ink-3);
+  font-weight: 700;
+}
+.spread .note {
+  font-size: 13.5px;
+  color: var(--ink-2);
+  margin: 0 0 26px;
+}
+.axis-scroll {
+  overflow-x: auto;
+  /* A pin at 0 centres its label on the axis start, so the axis is inset far enough for the
+     shortest label to sit under it without being clipped. */
+  padding: 0 30px;
+  margin: 0 -30px;
+}
+.axis {
+  position: relative;
+  height: 96px;
+}
+.axis .track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 44px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--r0),
+    var(--r1) 30%,
+    var(--r2) 48%,
+    var(--r3) 64%,
+    var(--r4)
+  );
+  opacity: 0.22;
+}
+.thr {
+  position: absolute;
+  top: 34px;
+  height: 26px;
+  width: 1px;
+  background: var(--ink-3);
+}
+.thr span {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.pin {
+  position: absolute;
+  transform: translateX(-50%);
+  text-align: center;
+}
+.pin i {
+  display: block;
+  width: 11px;
+  height: 20px;
+  border-radius: 3px;
+  margin: 0 auto;
+}
+.pin b {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  margin-top: 5px;
+  white-space: nowrap;
+}
+.lane-a {
+  top: 36px;
+}
+.lane-b {
+  top: 0;
+}
+
+/* ---------- dense lists ---------- */
+
+.list {
+  margin: 22px 34px 52px;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.lh,
+.r {
+  display: grid;
+  grid-template-columns: 156px 168px 1fr 250px;
+  gap: 20px;
+  align-items: center;
+  padding: 11px 30px;
+}
+.lh {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  font-weight: 700;
+  border-bottom: 1px solid var(--rule);
+}
+.r {
+  border-bottom: 1px solid var(--rule-2);
+  text-decoration: none;
+  color: inherit;
+  transition: background 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.r:last-child {
+  border-bottom: none;
+}
+.r:hover {
+  background: var(--panel-2);
+}
+.nm {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.mv {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.mv b {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.wy {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+/* the same measurement as the spread, one row at a time */
+.g {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.g .n {
+  font-family: var(--mono);
+  font-size: 16px;
+  width: 26px;
+  text-align: right;
+}
+.g .t {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--rule);
+  position: relative;
+}
+.g .t i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+}
+.g .t u {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--tick);
+}
+.g .w {
+  font-size: 12px;
+  font-weight: 700;
+  width: 52px;
+}
+
+/* ---------- panels ---------- */
+
+.foot {
+  margin: 0 34px 64px;
+  display: grid;
+  grid-template-columns: 1fr 330px;
+  gap: 26px;
+  align-items: start;
+}
+.wrap {
+  margin: 26px 34px 64px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 24px 28px;
+}
+.kick {
+  font-size: 10.5px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--ink-3);
+  margin: 0 0 10px;
+}
+.card h3 {
+  font-family: var(--display);
+  font-size: 24px;
+  letter-spacing: -0.03em;
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+.card p {
+  margin: 0 0 14px;
+  color: var(--ink-2);
+  font-size: 14.5px;
+}
+.card p:last-child {
+  margin-bottom: 0;
+}
+.claim {
+  border-left: 2px solid var(--rule);
+  padding: 2px 0 2px 16px;
+  margin: 14px 0;
+}
+.claim .c1 {
+  color: var(--ink);
+  font-size: 14.5px;
+  margin: 0 0 4px;
+}
+.claim .c2 {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  margin: 0;
+}
+code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+a.src,
+a.plain {
+  color: var(--ink);
+  text-underline-offset: 2px;
+}
+
+/* the arithmetic, shown so a reader can add it up */
+.fall .f {
+  display: grid;
+  grid-template-columns: 1fr 34px 96px;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule-2);
+  font-size: 13.5px;
+}
+.fall .f span {
+  color: var(--ink-2);
+}
+.fall .f b {
+  font-family: var(--mono);
+  font-weight: 500;
+  text-align: right;
+  font-size: 13px;
+}
+.fall .f i {
+  display: block;
+  height: 7px;
+  border-radius: 3px;
+}
+.fall .z span,
+.fall .z b {
+  color: var(--ink-3);
+}
+.total {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 12px;
+  margin-top: 8px;
+  border-top: 2px solid var(--ink);
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 19px;
+}
+
+/* ---------- audit register ---------- */
+
+.reg {
+  display: grid;
+  grid-template-columns: 172px 190px 1fr 132px;
+  gap: 20px;
+  align-items: baseline;
+  padding: 12px 30px;
+  border-bottom: 1px solid var(--rule-2);
+  font-size: 14px;
+}
+.reg:last-child {
+  border-bottom: none;
+}
+.reg .t {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.reg .who {
+  color: var(--ink-2);
+}
+.chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 2px 7px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* ---------- rubric ---------- */
+
+.rub {
+  display: grid;
+  grid-template-columns: 1fr 190px 66px;
+  gap: 20px;
+  align-items: baseline;
+  padding: 11px 30px;
+  border-bottom: 1px solid var(--rule-2);
+  font-size: 14px;
+}
+.rub:last-child {
+  border-bottom: none;
+}
+.rub .s {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.rub .p {
+  font-family: var(--mono);
+  text-align: right;
+  font-size: 14px;
+}
+.rub .p.zero {
+  color: var(--ink-3);
+}
+
+.bands {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 22px;
+}
+.bandcard {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 18px 20px;
+  background: var(--panel);
+}
+.bandcard .rng {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.bandcard h4 {
+  font-family: var(--display);
+  font-size: 19px;
+  margin: 6px 0 8px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.bandcard p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.bandcard .rule-id {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 10px;
+  display: block;
+}
+
+/* ---------- architecture schematic ---------- */
+
+.schematic {
+  width: 100%;
+  height: auto;
+  margin-top: 6px;
+}
+.schematic text {
+  font-family: var(--sans);
+  fill: var(--ink);
+}
+.schematic .cap {
+  font-size: 12px;
+  font-weight: 600;
+}
+.schematic .sub {
+  font-size: 10.5px;
+  fill: var(--ink-3);
+  font-family: var(--mono);
+}
+.schematic .box {
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-width: 1.5;
+  rx: 6;
+}
+.schematic .line {
+  stroke: var(--ink-2);
+  stroke-width: 1.5;
+  fill: none;
+}
+.schematic .zone {
+  fill: none;
+  stroke: var(--rule);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+  rx: 10;
+}
+/* The one coloured mark in the diagram, because it IS a risk statement: the model branch ends. */
+.schematic .stopmark {
+  stroke: var(--r4);
+  stroke-width: 3.5;
+}
+
+.spinup {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--panel-2);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  color: var(--ink-2);
+  line-height: 1.9;
+}
+.spinup b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.two {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 26px;
+  align-items: start;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  /* The run metadata repeats on the Rubric page, so it goes rather than forcing a scrolling bar. */
+  .bar {
+    flex-wrap: wrap;
+    gap: 14px 18px;
+    padding: 12px 16px;
+  }
+  .bar .right {
+    display: none;
+  }
+  .bar nav {
+    gap: 16px;
+  }
+
+  .band,
+  .spread,
+  .list,
+  .foot,
+  .wrap {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+  .band {
+    padding: 28px 16px 20px;
+  }
+  .spread {
+    padding: 18px 16px 10px;
+  }
+  .foot,
+  .two,
+  .bands {
+    grid-template-columns: 1fr;
+  }
+  .lh {
+    display: none;
+  }
+
+  /* The axis keeps its meaning at any width, so it scrolls sideways inside its own panel rather
+     than being squashed until the labels collide. */
+  .axis {
+    min-width: 620px;
+  }
+
+  .r {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'nm sc' 'mv sc' 'wy wy';
+    row-gap: 4px;
+    padding: 14px 16px;
+  }
+  .nm {
+    grid-area: nm;
+  }
+  .mv {
+    grid-area: mv;
+  }
+  .wy {
+    grid-area: wy;
+  }
+  .g {
+    grid-area: sc;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+  }
+  .g .t {
+    width: 96px;
+    flex: none;
+  }
+  .g .n,
+  .g .w {
+    width: auto;
+  }
+
+  .reg,
+  .rub {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 14px 16px;
+  }
+  .rub .p {
+    text-align: left;
+  }
+  .card {
+    padding: 20px 18px;
+  }
+
+  /* File paths and symbol names cannot be shortened, so they wrap rather than push the page. */
+  code {
+    overflow-wrap: anywhere;
+  }
+  .fall .f {
+    grid-template-columns: 1fr 30px 56px;
+    gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+}

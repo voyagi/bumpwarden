@@ -50,23 +50,29 @@ what a triage tool is for.
 This is also the reason there is no brand accent colour. A brand blue sitting next to a risk red
 would teach the eye that colour is decoration. It is not.
 
-| Name   | Hex       | Role                                       |
-| ------ | --------- | ------------------------------------------ |
-| Ground | `#FAFAF9` | Page background                            |
-| Panel  | `#FFFFFF` | Reading surfaces                           |
-| Ink    | `#14181B` | Primary text, the wordmark, the total rule |
-| Ink 2  | `#5A6469` | Secondary text                             |
-| Ink 3  | `#8B959A` | Labels, axis annotations, spent factors    |
-| Rule   | `#E6E8E7` | Borders                                    |
-| Rule 2 | `#F0F2F1` | Row separators                             |
-| Risk 0 | `#0F766E` | Clear, the low end of the ramp             |
-| Risk 1 | `#4D7C3F` | Ramp step                                  |
-| Risk 2 | `#B7791F` | Caution                                    |
-| Risk 3 | `#C2410C` | Caution wording, factor bars               |
-| Risk 4 | `#B91C1C` | Held, the high end of the ramp             |
+| Name   | Hex       | Role                                                                                                                                                         |
+| ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Ground | `#FAFAF9` | Page background                                                                                                                                              |
+| Panel  | `#FFFFFF` | Reading surfaces                                                                                                                                             |
+| Ink    | `#14181B` | Primary text, the wordmark, the total rule                                                                                                                   |
+| Ink 2  | `#5A6469` | Secondary text                                                                                                                                               |
+| Ink 3  | `#6B747A` | Labels, axis annotations, spent factors. Darker than it first looks like it needs to be, because these are small text at 4.77:1 rather than a graphic at 3:1 |
+| Rule   | `#E6E8E7` | Borders                                                                                                                                                      |
+| Rule 2 | `#F0F2F1` | Row separators                                                                                                                                               |
+| Risk 0 | `#0F766E` | Clear, the low end of the ramp                                                                                                                               |
+| Risk 1 | `#4D7C3F` | Ramp step                                                                                                                                                    |
+| Risk 2 | `#B7791F` | Caution                                                                                                                                                      |
+| Risk 3 | `#C2410C` | Caution wording, factor bars                                                                                                                                 |
+| Risk 4 | `#B91C1C` | Held, the high end of the ramp                                                                                                                               |
 
 The five risk values are a continuous ramp, not five badges. A score sits somewhere along it, and
-the band words Clear, Caution and Held name where. Contrast is measured, not asserted, before this
+the band words Clear, Caution and Held name where.
+
+There is a full dark theme on `prefers-color-scheme`, where the ramp lifts so every step keeps its
+contrast on a dark ground. What a step means never changes, only its luminance. Ground `#0E1113`,
+panel `#161A1D`, ink `#E8EDF0`, ramp `#2DD4A7` to `#F2706E`.
+
+Contrast is measured, not asserted, before this
 ships: every risk value must reach at least 4.5 to 1 against Panel at text size, and any value used
 only as a bar or a pin must still reach 3 to 1.
 

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bumpwarden</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wdth,wght@0,75..125,200..900&family=JetBrains+Mono:wght@100..800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="bumpwarden.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <a class="logo" href="home.html">bumpwarden</a>
+      <nav>
+        <a href="home.html" aria-current="page">Home</a>
+        <a href="project.html">Queue</a>
+        <a href="audit.html">Audit</a>
+        <a href="rubric.html">Rubric</a>
+        <a href="about.html">About</a>
+      </nav>
+      <span class="right">rubric v1.0.0 &middot; next run 18:00 UTC</span>
+    </header>
+
+    <section class="band">
+      <h1>Two repositories watched. Four bumps held.</h1>
+      <p class="lede">
+        bumpwarden reads what each of your dependencies released, scores the risk of taking it with
+        a published rubric, and acts on GitHub. It explains itself and it never merges.
+      </p>
+    </section>
+
+    <section class="list">
+      <div class="lh">
+        <span>Repository</span><span>Last run</span><span>Pending</span><span>Spread</span>
+      </div>
+
+      <a class="r" href="project.html">
+        <span class="nm">bumpwarden-demo-app</span>
+        <span class="mv"><b>06:00</b> UTC &middot; 1.9s</span>
+        <span class="wy">10 bumps: 3 clear, 3 caution, 4 held</span>
+        <span class="g">
+          <span class="n">87</span>
+          <span class="t">
+            <i style="width: 87%; background: var(--r4)"></i>
+            <u style="left: 30%"></u><u style="left: 61%"></u>
+          </span>
+          <span class="w" style="color: var(--r4)">Worst</span>
+        </span>
+      </a>
+
+      <a class="r" href="project.html">
+        <span class="nm">bumpwarden</span>
+        <span class="mv"><b>06:00</b> UTC &middot; 0.8s</span>
+        <span class="wy">2 bumps: 2 clear, nothing to do</span>
+        <span class="g">
+          <span class="n">0</span>
+          <span class="t">
+            <i style="width: 1.5%; background: var(--r0)"></i>
+            <u style="left: 30%"></u><u style="left: 61%"></u>
+          </span>
+          <span class="w" style="color: var(--r0)">Worst</span>
+        </span>
+      </a>
+    </section>
+
+    <section class="foot">
+      <div class="card">
+        <p class="kick">Latest actions</p>
+        <div class="fall">
+          <div class="f">
+            <span>Opened hold issue 41 &middot; glob 8.1.0 to 13.0.6</span><b>87</b>
+            <i style="width: 87%; background: var(--r4)"></i>
+          </div>
+          <div class="f">
+            <span>Opened hold issue 40 &middot; chalk 4.1.2 to 6.0.0</span><b>83</b>
+            <i style="width: 83%; background: var(--r4)"></i>
+          </div>
+          <div class="f">
+            <span>Updated issue 35 &middot; dotenv 16.4.5 to 17.4.2</span><b>44</b>
+            <i style="width: 44%; background: var(--r2)"></i>
+          </div>
+          <div class="f">
+            <span>Opened pull request 33 &middot; zod 4.4.2 to 4.4.3</span><b>0</b>
+            <i style="width: 1.5%; background: var(--r0)"></i>
+          </div>
+        </div>
+        <p style="margin-top: 16px">
+          <a class="plain" href="audit.html">Read the full audit log</a>
+        </p>
+      </div>
+
+      <div class="card">
+        <p class="kick">How it decides</p>
+        <p>
+          Sixteen factors, each computed from a source you can open, summed and capped at 100. The
+          band decides the action: a pull request under 31, an issue up to 60, a hold above that.
+        </p>
+        <p>
+          The model reads the release notes and explains what breaks in your code. It never moves
+          the number, holds no GitHub tool, and cannot reach the part that writes.
+        </p>
+        <p><a class="plain" href="rubric.html">Read the published rubric</a></p>
+      </div>
+    </section>
+  </body>
+</html>
