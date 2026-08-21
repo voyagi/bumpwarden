@@ -89,15 +89,28 @@ export function importsPackage(file: SourceFile, packageName: string): boolean {
   return pattern.test(file.text);
 }
 
-function sitesForSymbol(file: SourceFile, symbol: string): UsageSite[] {
-  const pattern = new RegExp(`\\b${escapeForRegex(symbol)}\\b`);
-  const sites: UsageSite[] = [];
+/**
+ * The brief and the locking table quote a handful of call sites, so collecting every one of them on
+ * a large repository buys nothing and can produce thousands of rows. The cap bounds the evidence,
+ * not the verdict: one match already decides the factor.
+ */
+const MAX_SITES = 25;
 
-  file.text.split('\n').forEach((line, index) => {
-    if (pattern.test(line)) {
+function sitesIn(file: SourceFile, symbols: string[]): UsageSite[] {
+  const patterns = symbols.map((symbol) => ({
+    symbol,
+    pattern: new RegExp(`\\b${escapeForRegex(symbol)}\\b`),
+  }));
+  const sites: UsageSite[] = [];
+  const lines = file.text.split('\n');
+
+  for (const [index, line] of lines.entries()) {
+    for (const { symbol, pattern } of patterns) {
+      if (!pattern.test(line)) continue;
       sites.push({ path: file.path, line: index + 1, symbol, text: line.trim().slice(0, 160) });
+      if (sites.length >= MAX_SITES) return sites;
     }
-  });
+  }
 
   return sites;
 }
@@ -114,9 +127,11 @@ export function classifyUsage(
     return { match: 'unused', symbols, sites: [] };
   }
 
-  const sites = importers.flatMap((file) =>
-    symbols.flatMap((symbol) => sitesForSymbol(file, symbol)),
-  );
+  const sites: UsageSite[] = [];
+  for (const file of importers) {
+    sites.push(...sitesIn(file, symbols).slice(0, MAX_SITES - sites.length));
+    if (sites.length >= MAX_SITES) break;
+  }
 
   return {
     match: sites.length > 0 ? 'changed-symbol' : 'package-only',

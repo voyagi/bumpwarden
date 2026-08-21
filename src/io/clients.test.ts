@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { RunFetcher } from './http.js';
 import { fetchAdvisory, fetchVersionFacts, severityFromCvss } from './depsdev.js';
-import { fetchPackument, githubRepoFrom, registryUrl, resolveCandidate } from './npm.js';
+import {
+  fetchPackument,
+  githubRepoFrom,
+  isValidPackageName,
+  registryUrl,
+  resolveCandidate,
+} from './npm.js';
 import { compareTags, fetchReleaseNotes, fetchTextFile, tagCandidates } from './github.js';
 import { json, routedFetch, status, urlContains } from '../testkit/scripted-fetch.js';
 
@@ -69,6 +75,32 @@ describe('npm registry client', () => {
       repositoryUrl: null,
     };
     expect(resolveCandidate(packument, '1.0.0')?.peerRangeChanged).toBe(true);
+  });
+
+  const names: Array<[string, boolean]> = [
+    ['express', true],
+    ['@google/adk', true],
+    ['node-fetch', true],
+    ['a.b_c~d', true],
+    ['.hidden', false],
+    ['../../etc/passwd', false],
+    ['express?foo=1', false],
+    ['express/../glob', false],
+    ['Express', false],
+    ['', false],
+  ];
+
+  it.each(names)('treats %s as a valid npm name: %s', (name, expected) => {
+    expect(isValidPackageName(name)).toBe(expected);
+  });
+
+  it('never puts an invalid dependency key into a url', async () => {
+    const { fetcher, urls } = fetcherFor([]);
+
+    const result = await fetchPackument(fetcher, '../../etc/passwd');
+
+    expect(result).toMatchObject({ ok: false, reason: 'malformed' });
+    expect(urls).toEqual([]);
   });
 
   it('reads dist-tags, engines and the repository out of a packument', async () => {

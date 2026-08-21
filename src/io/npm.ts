@@ -48,10 +48,30 @@ export function registryUrl(packageName: string): string {
   return `${REGISTRY}/${packageName.replace('/', '%2F')}`;
 }
 
+/**
+ * A dependency key comes from a watched repository's manifest, which is not this service's data, so
+ * it is checked against the registry's own name grammar before being pasted into a URL. Without
+ * this, a key like `../../x` or one carrying a query string reaches fetch as a crafted path.
+ */
+const PACKAGE_NAME = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/;
+
+export function isValidPackageName(name: string): boolean {
+  return name.length > 0 && name.length <= 214 && PACKAGE_NAME.test(name);
+}
+
 export async function fetchPackument(
   fetcher: RunFetcher,
   packageName: string,
 ): Promise<Outcome<Packument>> {
+  if (!isValidPackageName(packageName)) {
+    return {
+      ok: false,
+      reason: 'malformed',
+      status: null,
+      detail: `${packageName} is not a valid npm package name`,
+    };
+  }
+
   const result = await fetcher.getJson<PackumentResponse>(registryUrl(packageName));
   if (!result.ok) return result;
 

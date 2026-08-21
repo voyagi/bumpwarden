@@ -7,14 +7,16 @@ export interface IdTokenClaims {
   iss?: string;
 }
 
-export type TokenVerifier = (
-  idToken: string,
-  audience: string | null,
-) => Promise<IdTokenClaims | null>;
+export type TokenVerifier = (idToken: string, audience: string) => Promise<IdTokenClaims | null>;
 
 export interface RunAuthConfig {
   /** Service account Cloud Scheduler signs with. No value means the endpoint stays shut. */
   invokerEmail: string | null;
+  /**
+   * The exact URL Cloud Scheduler calls. Required, not optional: google-auth-library only checks
+   * the `aud` claim when an audience is passed, so verifying without one accepts any Google-signed
+   * token carrying the invoker's email, including one minted for a completely different service.
+   */
   audience: string | null;
   verify: TokenVerifier;
 }
@@ -36,6 +38,9 @@ export async function authorizeRun(
 ): Promise<AuthResult> {
   if (!config.invokerEmail) {
     return { ok: false, status: 503, reason: 'the run endpoint has no configured invoker' };
+  }
+  if (!config.audience) {
+    return { ok: false, status: 503, reason: 'the run endpoint has no configured audience' };
   }
 
   const bearer = BEARER.exec(authorizationHeader ?? '');
@@ -63,10 +68,7 @@ export async function authorizeRun(
 
 export function googleTokenVerifier(client = new OAuth2Client()): TokenVerifier {
   return async (idToken, audience) => {
-    const ticket = await client.verifyIdToken({
-      idToken,
-      ...(audience ? { audience } : {}),
-    });
+    const ticket = await client.verifyIdToken({ idToken, audience });
     return ticket.getPayload() ?? null;
   };
 }

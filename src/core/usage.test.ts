@@ -103,6 +103,22 @@ describe('classifyUsage', () => {
     });
   });
 
+  it('caps the evidence it collects, because one match already decides the factor', () => {
+    const many = {
+      path: 'src/big.ts',
+      text: [
+        "import express from 'express';",
+        ...Array.from({ length: 200 }, () => 'res.sendfile(x);'),
+      ].join('\n'),
+    };
+
+    const result = classifyUsage('express', EXPRESS_NOTES, [many]);
+
+    expect(result.match).toBe('changed-symbol');
+    expect(result.sites.length).toBeLessThanOrEqual(25);
+    expect(result.sites.length).toBeGreaterThan(0);
+  });
+
   it('does not look for call sites in files that never import the package', () => {
     const decoy = { path: 'src/decoy.ts', text: 'const note = "res.sendfile is gone";' };
     const result = classifyUsage('express', EXPRESS_NOTES, [decoy]);

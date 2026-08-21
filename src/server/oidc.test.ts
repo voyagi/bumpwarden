@@ -37,6 +37,14 @@ describe('authorizeRun', () => {
     expect(result).toMatchObject({ ok: false, status: 503 });
   });
 
+  it('refuses to verify at all without an audience, so a token minted elsewhere cannot be replayed', async () => {
+    const verify = vi.fn(async () => VALID);
+    const result = await authorizeRun('Bearer token', config({ audience: null, verify }));
+
+    expect(result).toMatchObject({ ok: false, status: 503 });
+    expect(verify).not.toHaveBeenCalled();
+  });
+
   const rejected: Array<[string, string | undefined]> = [
     ['a missing header', undefined],
     ['an empty header', ''],
