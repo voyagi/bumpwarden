@@ -27,6 +27,11 @@ const MAX_AUDIT = 200;
 
 export interface FirestoreStoreOptions {
   projectId: string;
+  /**
+   * True when FIRESTORE_EMULATOR_HOST points the client at a local emulator. The entry point owns
+   * reading that, so this class stays free of the environment.
+   */
+  emulated?: boolean;
   /** Injected in tests; production builds its own client. */
   client?: Firestore;
 }
@@ -40,14 +45,15 @@ export class FirestoreStore implements BumpwardenStore {
 
   constructor(options: FirestoreStoreOptions) {
     // preferRest keeps a cold Cloud Run container from loading gRPC for what are all small reads
-    // and writes. FIRESTORE_EMULATOR_HOST, when set, is picked up by the client itself, which is
-    // how local runs and the emulator contract test work without any credentials.
+    // and writes. It cannot be used against the emulator: preferRest routes through google-gax,
+    // which asks for application default credentials before it looks at FIRESTORE_EMULATOR_HOST,
+    // so a local run dies on "Could not load the default credentials" instead of connecting.
     this.db =
       options.client ??
       new Firestore({
         projectId: options.projectId,
         ignoreUndefinedProperties: true,
-        preferRest: true,
+        preferRest: !options.emulated,
       });
   }
 

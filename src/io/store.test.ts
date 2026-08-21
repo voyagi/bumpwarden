@@ -228,7 +228,11 @@ async function resetEmulator(): Promise<FirestoreStore> {
   for (const collection of ['projects', 'runs', 'actions', 'briefs']) {
     await client.recursiveDelete(client.collection(collection));
   }
-  return new FirestoreStore({ projectId: EMULATOR_PROJECT, client });
+
+  // The store builds its own client rather than taking the one above, so this run exercises the
+  // exact construction the deployed service uses. Injecting a client here once hid a real break:
+  // the production settings could not reach the emulator at all while this suite stayed green.
+  return new FirestoreStore({ projectId: EMULATOR_PROJECT, emulated: true });
 }
 
 describe.skipIf(!EMULATOR)('against the Firestore emulator', () => {

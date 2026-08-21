@@ -18,7 +18,10 @@ import { googleTokenVerifier } from './oidc.js';
 
 function buildStore(): BumpwardenStore {
   if (!env.GOOGLE_CLOUD_PROJECT) return new MemoryStore();
-  return new FirestoreStore({ projectId: env.GOOGLE_CLOUD_PROJECT });
+  return new FirestoreStore({
+    projectId: env.GOOGLE_CLOUD_PROJECT,
+    emulated: Boolean(env.FIRESTORE_EMULATOR_HOST),
+  });
 }
 
 function actorFor(repository: WatchedRepository): RepositoryActor | null {
