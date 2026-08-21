@@ -35,6 +35,9 @@ describe('bumping a manifest range', () => {
     ['a dist-tag', '"pkg": "latest"'],
     ['a range union', '"pkg": ">=1.0.0 <2.0.0"'],
     ['a wildcard', '"pkg": "*"'],
+    // Rewriting only the head of this would drop the second alternative and change what installs.
+    ['an alternation that starts like a caret range', '"pkg": "^1.0.0 || ^2.0.0"'],
+    ['a caret range with a trailing comparator', '"pkg": "^1.0.0 <1.9.0"'],
   ];
 
   it.each(unsupported)('refuses to rewrite %s', (_label, line) => {
@@ -58,6 +61,13 @@ describe('bumping a manifest range', () => {
   it('handles a scoped name, whose slash is not a regex wildcard', () => {
     const manifest = '{ "dependencies": { "@types/node": "^24.0.0" } }';
     expect(bumpManifestRange(manifest, '@types/node', '24.13.0')?.to).toBe('^24.13.0');
+  });
+
+  it('edits a range that was written with padding, and drops the padding', () => {
+    const manifest = '{ "dependencies": { "pkg": " ^1.0.0 " } }';
+    const edit = bumpManifestRange(manifest, 'pkg', '2.0.0');
+    expect(edit?.to).toBe('^2.0.0');
+    expect(edit?.text).toContain('"pkg": "^2.0.0"');
   });
 
   it('keeps a prerelease candidate intact', () => {

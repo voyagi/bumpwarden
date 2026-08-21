@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { scoreBump } from './scorer.js';
-import { BAND_THRESHOLDS, MAX_SCORE, POINTS, RUBRIC_VERSION, bandFor } from './rubric.js';
+import { AGE_DAYS, BAND_THRESHOLDS, MAX_SCORE, POINTS, RUBRIC_VERSION, bandFor } from './rubric.js';
 import type { AdvisorySeverity, CandidateBump, UsageMatch } from './types.js';
 
 const NOW = new Date('2026-08-21T10:00:00Z');
@@ -83,6 +83,22 @@ describe('release age factor', () => {
     expect(points(result, 'age')).toBe(0);
     expect(result.factors.find((f) => f.id === 'age')?.evidence).toContain('unknown');
   });
+
+  // The published rubric says "less than 7 days", so a candidate exactly 7 days old is settling.
+  // Both sides of that edge are asserted, because only the pair pins the comparison.
+  it('reads a candidate exactly at the freshness edge as settling, not fresh', () => {
+    const at = new Date(NOW.getTime() - AGE_DAYS.fresh * 86_400_000).toISOString();
+    expect(points(scoreBump(bump({ candidatePublishedAt: at }), NOW), 'age')).toBe(
+      POINTS.age7To14Days,
+    );
+  });
+
+  it('reads a candidate one day inside that edge as fresh', () => {
+    const at = new Date(NOW.getTime() - (AGE_DAYS.fresh - 1) * 86_400_000).toISOString();
+    expect(points(scoreBump(bump({ candidatePublishedAt: at }), NOW), 'age')).toBe(
+      POINTS.ageUnder7Days,
+    );
+  });
 });
 
 describe('evidence factors', () => {
@@ -133,6 +149,15 @@ describe('evidence factors', () => {
     );
   });
 
+  it.each<[AdvisorySeverity, number]>([
+    ['critical', POINTS.advisoryCriticalOrHigh],
+    ['high', POINTS.advisoryCriticalOrHigh],
+    ['moderate', POINTS.advisoryModerateOrLow],
+    ['low', POINTS.advisoryModerateOrLow],
+  ])('a lone %s advisory scores %i', (severity, expected) => {
+    expect(points(scoreBump(bump({ advisories: [severity] }), NOW), 'advisory')).toBe(expected);
+  });
+
   it('charges more for a deprecated candidate than a deprecated installed version', () => {
     expect(points(scoreBump(bump({ currentDeprecated: true }), NOW), 'deprecation')).toBe(
       POINTS.currentDeprecated,
@@ -143,6 +168,63 @@ describe('evidence factors', () => {
         'deprecation',
       ),
     ).toBe(POINTS.candidateDeprecated);
+  });
+
+  it('reads a conventional commit bang only where a line starts with one', () => {
+    const result = scoreBump(
+      bump({
+        release: {
+          notes: 'The examples now print `total!: 4` when the server starts.',
+          notesSource: 'CHANGELOG.md',
+          commitSubjects: [],
+        },
+      }),
+      NOW,
+    );
+    expect(points(result, 'breaking-marker')).toBe(0);
+  });
+
+  it('reads breakingchange written with no separator at all', () => {
+    const result = scoreBump(
+      bump({
+        release: {
+          notes: null,
+          notesSource: null,
+          commitSubjects: ['breakingchange: the v1 client is gone'],
+        },
+      }),
+      NOW,
+    );
+    expect(points(result, 'breaking-marker')).toBe(POINTS.breakingMarker);
+  });
+
+  it('scores an unparseable version pair as a minor and says which it did', () => {
+    const result = scoreBump(
+      bump({ currentVersion: 'workspace:*', candidateVersion: 'latest' }),
+      NOW,
+    );
+    const semverFactor = result.factors.find((f) => f.id === 'semver');
+    expect(semverFactor?.points).toBe(POINTS.semverMinor);
+    expect(semverFactor?.evidence).toContain('could not be parsed');
+  });
+
+  it('survives an engines range no parser accepts, scoring it as no comparison', () => {
+    const result = scoreBump(bump({ candidateEngines: 'whatever', repoEngines: '>=18' }), NOW);
+    expect(points(result, 'engines')).toBe(0);
+    expect(result.factors.find((f) => f.id === 'engines')?.evidence).toBe(
+      'no comparable engines range',
+    );
+  });
+
+  it('quotes usage evidence as path and line, which is what the issue prints', () => {
+    const result = scoreBump(
+      bump({
+        usage: 'changed-symbol',
+        usageSites: [{ path: 'src/a.ts', line: 12, symbol: 'x.y', text: 'x.y()' }],
+      }),
+      NOW,
+    );
+    expect(result.factors.find((f) => f.id === 'usage')?.evidence).toBe('src/a.ts:12');
   });
 
   it('only charges for engines when the candidate raises the floor', () => {

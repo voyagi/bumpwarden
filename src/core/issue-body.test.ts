@@ -3,6 +3,7 @@ import { NOW, candidateBump, readyBrief, scoreOf, summaryOf } from '../testkit/f
 import { unavailableBrief, type BriefRecord } from './brief.js';
 import { keyFromBody } from './bump-key.js';
 import {
+  MAX_BODY,
   actionBody,
   botCommentBody,
   branchName,
@@ -100,8 +101,30 @@ describe('the issue body', () => {
     brief.content.whatChanged = 'x'.repeat(100_000);
 
     const body = actionBody(input({ brief }));
-    expect(body.length).toBeLessThanOrEqual(60_000);
+    expect(body.length).toBeLessThanOrEqual(MAX_BODY);
     expect(body).toContain('Truncated');
+  });
+
+  /**
+   * The limit is a boundary, not a direction: a body one character over must be cut and a body
+   * landing exactly on it must not be, or a legitimate changelog loses its last paragraph.
+   */
+  it('leaves a body that lands exactly on the limit alone, and cuts the next character', () => {
+    const bodyWith = (padding: number): string => {
+      const brief = readyBrief();
+      if (!brief.content) throw new Error('the fixture lost its content');
+      brief.content.whatChanged = 'x'.repeat(padding);
+      return actionBody(input({ brief }));
+    };
+
+    // One character of padding is one character of body, so one measurement finds the exact fit.
+    const padding = 1_000 + (MAX_BODY - bodyWith(1_000).length);
+
+    const exact = bodyWith(padding);
+    expect(exact.length).toBe(MAX_BODY);
+    expect(exact).not.toContain('Truncated');
+
+    expect(bodyWith(padding + 1)).toContain('Truncated');
   });
 
   it('writes a migration checklist on an issue and numbered steps on a pull request', () => {
@@ -109,7 +132,17 @@ describe('the issue body', () => {
       candidateBump({ candidateVersion: '4.18.3', usage: 'unused', usageSites: [] }),
     );
     expect(actionBody(input())).toContain('- [ ] Rename');
-    expect(actionBody(input({ score: green, rule: ruleFor('green') }))).toContain('1. Rename');
+    // Anchored to the line start: "-1. Rename" would satisfy a bare contains check.
+    expect(actionBody(input({ score: green, rule: ruleFor('green') }))).toContain('\n1. Rename');
+  });
+
+  it('leaves the dashboard line out entirely when the service has no url', () => {
+    expect(actionBody(input({ dashboardUrl: null }))).not.toContain('Full score breakdown');
+  });
+
+  it('falls back to the unavailable text when a brief claims ready with no content', () => {
+    const brief = { ...readyBrief(), content: null };
+    expect(actionBody(input({ brief }))).toContain('Brief unavailable');
   });
 });
 

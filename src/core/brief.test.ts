@@ -109,6 +109,18 @@ describe('claim verification', () => {
     const wrapped = claim({ quote: 'function has been\n  replaced by a camel-cased version' });
     expect(verifyClaims([wrapped], ground).claims).toHaveLength(1);
   });
+
+  // An empty string is a substring of every document, so a blank quote would otherwise walk
+  // straight through the one check that stands between a reader and an invented quotation.
+  it.each([
+    ['empty', ''],
+    ['whitespace only', '   \n  '],
+    ['quote marks only', '``'],
+  ])('drops a claim whose quote is %s', (_label, quote) => {
+    const result = verifyClaims([claim({ quote })], ground);
+    expect(result.claims).toEqual([]);
+    expect(result.dropped).toBe(1);
+  });
 });
 
 describe('an unavailable brief', () => {

@@ -8,9 +8,12 @@ import {
   runIdFor,
   summarizeRepositories,
   totalBumps,
+  worstBand,
+  type BandCounts,
   type ProjectSummary,
   type RepositoryResult,
 } from './records.js';
+import type { Band } from './types.js';
 
 describe('band counts', () => {
   it('counts each verdict', () => {
@@ -30,6 +33,22 @@ describe('band counts', () => {
 
   it('totals what a project page prints', () => {
     expect(totalBumps({ green: 2, amber: 3, red: 1 })).toBe(6);
+  });
+});
+
+/** The badge Home prints beside every project, so each row of this table is a pixel on that page. */
+describe('the band a project reads as overall', () => {
+  const table: Array<[BandCounts, Band]> = [
+    [{ green: 0, amber: 0, red: 0 }, 'green'],
+    [{ green: 5, amber: 0, red: 0 }, 'green'],
+    [{ green: 0, amber: 1, red: 0 }, 'amber'],
+    [{ green: 9, amber: 2, red: 0 }, 'amber'],
+    [{ green: 0, amber: 0, red: 1 }, 'red'],
+    [{ green: 4, amber: 4, red: 1 }, 'red'],
+  ];
+
+  it.each(table)('%o reads as %s', (counts, expected) => {
+    expect(worstBand(counts)).toBe(expected);
   });
 });
 

@@ -4,7 +4,7 @@ import type { PolicyRule } from './policy.js';
 import type { Band, Score } from './types.js';
 
 /** GitHub rejects a body over 65536 characters, and a run must never fail on a long changelog. */
-const MAX_BODY = 60_000;
+export const MAX_BODY = 60_000;
 
 export const VERDICT_WORD: Record<Band, string> = {
   green: 'Clear',

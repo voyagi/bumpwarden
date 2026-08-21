@@ -26,6 +26,10 @@ const ROUTE_FILE = {
   ].join('\n'),
 };
 
+function spanNotes(text: string): ReleaseEvidence {
+  return { notes: text, notesSource: 'CHANGELOG.md', commitSubjects: [] };
+}
+
 describe('importsPackage', () => {
   const table: Array<[string, boolean]> = [
     ["import express from 'express';", true],
@@ -73,6 +77,70 @@ describe('changedSymbols', () => {
   it('returns nothing when the notes could not be read', () => {
     expect(changedSymbols({ notes: null, notesSource: null, commitSubjects: [] })).toEqual([]);
   });
+
+  it('reads a removal subject through whatever spacing the writer used', () => {
+    expect(changedSymbols(spanNotes('Removed   parseQuery from the router.'))).toContain(
+      'parseQuery',
+    );
+  });
+});
+
+/**
+ * The stop list is the whole reason a usage match means something: without it a code span saying
+ * `null` would match every file in the repository and every bump would score as a changed symbol.
+ * One row per word, because a word quietly dropped from the list is invisible any other way.
+ */
+describe('spans the symbol reader refuses', () => {
+  const COMMON = [
+    'true',
+    'false',
+    'null',
+    'undefined',
+    'string',
+    'number',
+    'boolean',
+    'object',
+    'array',
+    'function',
+    'const',
+    'let',
+    'var',
+    'default',
+    'node',
+    'npm',
+    'main',
+    'type',
+    'types',
+    'module',
+    'index',
+    'error',
+    'options',
+    'config',
+  ];
+
+  it.each(COMMON)('ignores `%s`, which appears in every file', (word) => {
+    expect(changedSymbols(spanNotes(`The \`${word}\` value changed.`))).toEqual([]);
+  });
+
+  it('ignores a member of a common head, so `error.stack` is not treated as API', () => {
+    expect(changedSymbols(spanNotes('The `error.stack` field changed.'))).toEqual([]);
+  });
+
+  it('keeps a three character name and drops a two character one', () => {
+    expect(changedSymbols(spanNotes('Renamed `abc` and `ab` in this release.'))).toEqual(['abc']);
+  });
+
+  it('drops a span that is not one identifier', () => {
+    expect(changedSymbols(spanNotes('The `foo bar` option and the `1abc` flag changed.'))).toEqual(
+      [],
+    );
+  });
+
+  it('drops the call shape but keeps the name', () => {
+    expect(changedSymbols(spanNotes('Use `router.handle(req, res)` instead.'))).toEqual([
+      'router.handle',
+    ]);
+  });
 });
 
 describe('classifyUsage', () => {
@@ -115,8 +183,25 @@ describe('classifyUsage', () => {
     const result = classifyUsage('express', EXPRESS_NOTES, [many]);
 
     expect(result.match).toBe('changed-symbol');
-    expect(result.sites.length).toBeLessThanOrEqual(25);
-    expect(result.sites.length).toBeGreaterThan(0);
+    expect(result.sites).toHaveLength(25);
+  });
+
+  it('counts the cap across files rather than per file', () => {
+    const file = (path: string, matches: number) => ({
+      path,
+      text: [
+        "import express from 'express';",
+        ...Array.from({ length: matches }, () => 'res.sendfile(x);'),
+      ].join('\n'),
+    });
+
+    const result = classifyUsage('express', EXPRESS_NOTES, [
+      file('src/one.ts', 10),
+      file('src/two.ts', 200),
+    ]);
+
+    expect(result.sites).toHaveLength(25);
+    expect(result.sites.filter((site) => site.path === 'src/one.ts')).toHaveLength(10);
   });
 
   it('does not look for call sites in files that never import the package', () => {

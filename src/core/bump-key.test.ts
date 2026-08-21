@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { bodyCarriesKey, bumpKey, documentId, keyFromBody, marker } from './bump-key.js';
+import {
+  bodyCarriesKey,
+  bumpKey,
+  documentId,
+  keyFromBody,
+  marker,
+  repositoryId,
+} from './bump-key.js';
 
 const IDENTITY = {
   owner: 'demo',
@@ -51,5 +58,25 @@ describe('the hidden marker', () => {
     expect(keyFromBody('a plain issue somebody wrote by hand')).toBeNull();
     expect(keyFromBody('<!-- bumpwarden:key= -->')).toBeNull();
     expect(keyFromBody('<!-- bumpwarden:key=truncated')).toBeNull();
+  });
+
+  // GitHub's editor and a person copying a body both reflow whitespace, and losing the key would
+  // mean opening a second issue for a bump that already has one.
+  it('reads a key that came back with padding around it', () => {
+    expect(keyFromBody('<!-- bumpwarden:key=  voyagi/demo#glob@13.0.6   -->')).toBe(
+      'voyagi/demo#glob@13.0.6',
+    );
+  });
+});
+
+describe('the repository id', () => {
+  it('is owner and repo joined the way the watch list and the store spell it', () => {
+    expect(repositoryId('voyagi', 'bumpwarden-demo-app')).toBe('voyagi/bumpwarden-demo-app');
+  });
+
+  it('is the prefix of every bump key in that repository', () => {
+    expect(bumpKey(IDENTITY).startsWith(`${repositoryId(IDENTITY.owner, IDENTITY.repo)}#`)).toBe(
+      true,
+    );
   });
 });
