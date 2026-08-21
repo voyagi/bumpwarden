@@ -73,7 +73,13 @@ export function parseNpmLock(text: string): Map<string, string> {
     const marker = 'node_modules/';
     const at = path.lastIndexOf(marker);
     if (at === -1 || !entry.version) continue;
-    installed.set(path.slice(at + marker.length), entry.version);
+
+    const name = path.slice(at + marker.length);
+    // A package appears twice when something nests its own older copy beside the hoisted one, and
+    // the nested entry sorts later in the file. The manifest range refers to the hoisted copy, so
+    // letting a nested one win would report a version the reader does not have at top level:
+    // express 4.17.1 carries body-parser 1.19.0, which overwrote the installed 1.20.2.
+    if (path === `${marker}${name}` || !installed.has(name)) installed.set(name, entry.version);
   }
 
   for (const [name, entry] of Object.entries(json.dependencies ?? {})) {

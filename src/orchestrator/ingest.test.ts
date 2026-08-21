@@ -128,6 +128,33 @@ describe('manifest and lockfile parsing', () => {
     expect(installed.get('b')).toBe('1.2.3');
   });
 
+  it('keeps the hoisted version when a dependency also nests an older copy of the same package', () => {
+    const installed = parseNpmLock(
+      JSON.stringify({
+        packages: {
+          '': {},
+          'node_modules/body-parser': { version: '1.20.2' },
+          'node_modules/express': { version: '4.17.1' },
+          'node_modules/express/node_modules/body-parser': { version: '1.19.0' },
+        },
+      }),
+    );
+    expect(installed.get('body-parser')).toBe('1.20.2');
+  });
+
+  it('keeps a scoped package nested under another one out of the hoisted slot', () => {
+    const installed = parseNpmLock(
+      JSON.stringify({
+        packages: {
+          '': {},
+          'node_modules/@scope/pkg': { version: '2.0.0' },
+          'node_modules/tool/node_modules/@scope/pkg': { version: '1.0.0' },
+        },
+      }),
+    );
+    expect(installed.get('@scope/pkg')).toBe('2.0.0');
+  });
+
   it('falls back to the range floor and says so when the lockfile is unreadable', () => {
     const manifest = { engines: null, dependencies: [{ name: 'express', range: '^4.18.2' }] };
     expect(rangeFloor('^4.18.2')).toBe('4.18.2');
