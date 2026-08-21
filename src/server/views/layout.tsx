@@ -55,6 +55,9 @@ export function Shell(options: ShellOptions): JSX.Element {
         <title>{title}</title>
         <meta name="description" content={options.description} />
         <link rel="canonical" href={options.canonical} />
+        {/* Named explicitly so no browser falls back to requesting /favicon.ico and logging a 404
+            on every page view. The mark is the same rising scale the score marks are drawn on. */}
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content={WORDMARK} />
         <meta property="og:title" content={title} />

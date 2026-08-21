@@ -279,6 +279,34 @@ describe('every page', () => {
     expect(await text(store, '/')).toContain('Skip to the content');
   });
 
+  it('names its own icon, so no browser asks for a favicon that is not there', async () => {
+    expect(await text(store, '/')).toContain('rel="icon" href="/favicon.svg"');
+    expect((await app(store).request('http://local/favicon.svg')).status).toBe(200);
+  });
+});
+
+describe('what the crawlers read', () => {
+  /**
+   * The Sitemap directive is only valid as an absolute URL. A relative one parses as an error and
+   * the sitemap is never fetched, which is invisible from inside the product.
+   */
+  it('writes robots.txt with an absolute sitemap url', async () => {
+    const response = await app(store).request('http://local/robots.txt');
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain('User-agent: *');
+    expect(body).toContain('Sitemap: https://bumpwarden.example.run/sitemap.xml');
+    expect(body).not.toContain('Sitemap: /');
+  });
+
+  it('falls back to the requested host when the service has no configured url', async () => {
+    const bare = createApp({ store, baseUrl: null });
+    const body = await (await bare.request('http://local/robots.txt')).text();
+
+    expect(body).toContain('Sitemap: http://local/sitemap.xml');
+  });
+
   it('never serves a dotfile out of the asset folder, even one that is really there', async () => {
     // Serving a folder is not a decision to publish everything anyone drops into it. The file is
     // created for real, because a 404 on a path that never existed proves nothing about the guard.

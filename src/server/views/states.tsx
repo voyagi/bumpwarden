@@ -5,6 +5,11 @@ export interface StateProps {
   heading: string;
   lines: string[];
   action?: { label: string; href: string };
+  /**
+   * 1 when this panel IS the page, which is the whole of a 404 and of an empty home. A page whose
+   * only heading is an h2 leaves a screen reader with no top-level heading to jump to.
+   */
+  level?: 1 | 2;
 }
 
 /**
@@ -15,7 +20,7 @@ export interface StateProps {
 export function StatePanel(props: StateProps): JSX.Element {
   return (
     <section class="state">
-      <h2>{props.heading}</h2>
+      {props.level === 1 ? <h1>{props.heading}</h1> : <h2>{props.heading}</h2>}
       {props.lines.map((line) => (
         <p key={line}>{line}</p>
       ))}

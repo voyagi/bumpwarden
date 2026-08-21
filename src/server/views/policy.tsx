@@ -32,7 +32,7 @@ function BandCards(): JSX.Element {
       {BANDS.map((band) => (
         <div key={band} class="bandcard">
           <span class="rng">{BAND_RANGES[band]}</span>
-          <h4 style={`color:${WORD_COLOR[band]}`}>{verdictWord(band)}</h4>
+          <h2 style={`color:${WORD_COLOR[band]}`}>{verdictWord(band)}</h2>
           <p>{POLICY_RULES[band].summary}</p>
           <span class="rule-id">{POLICY_RULES[band].id}</span>
         </div>
@@ -59,14 +59,15 @@ export function PolicyPage(): JSX.Element {
         </p>
       </section>
 
-      <section class="list" role="table" aria-label="Scoring rubric">
+      {/* A div, not a section: ARIA does not allow the table role on a sectioning element. */}
+      <div class="list" role="table" aria-label="Scoring rubric">
         <div class="lh" role="row" style="grid-template-columns:1fr 190px 66px">
           <span role="columnheader">Factor</span>
           <span role="columnheader">Source</span>
           <span role="columnheader">Points</span>
         </div>
         {RubricRows()}
-      </section>
+      </div>
 
       <section class="wrap" style="margin-top:-30px">
         <p class="panel-h">The action per band</p>

@@ -56,7 +56,10 @@ function mountAssets(app: Hono): void {
     '/run-now.js',
     serveStatic({ root: './public', onFound: (_p, c) => c.header('Cache-Control', STYLE_CACHE) }),
   );
-  app.use('/robots.txt', serveStatic({ root: './public' }));
+  app.use(
+    '/favicon.svg',
+    serveStatic({ root: './public', onFound: (_p, c) => c.header('Cache-Control', ASSET_CACHE) }),
+  );
 }
 
 export function createApp(options: AppOptions = {}): Hono {

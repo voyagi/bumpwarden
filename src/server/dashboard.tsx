@@ -95,6 +95,7 @@ function notFound(c: Context, baseUrl: string | null | undefined, queueHref: str
         canonical,
         body: (
           <StatePanel
+            level={1}
             heading="There is nothing at that address."
             lines={[
               'A repository is only readable here while it is on the watch list, and a bump only while its candidate version is still the newest one resolved. Both disappear from the dashboard when they stop being true, which is deliberate: a page showing a bump that no longer exists would be a page telling you something false.',
@@ -128,6 +129,7 @@ function failed(c: Context, baseUrl: string | null | undefined, error: Error) {
         canonical,
         body: (
           <StatePanel
+            level={1}
             heading="This page could not be built."
             lines={[
               'Something between the dashboard and its store went wrong while assembling this page. The run itself is unaffected: runs are triggered by the scheduler and write their results before anything renders them, so nothing has been lost by this failing.',
@@ -337,6 +339,22 @@ function mountRunNow(app: Hono, options: DashboardOptions): void {
   });
 }
 
+/**
+ * Generated rather than served from a file: the robots.txt spec requires the Sitemap directive to
+ * carry an absolute URL, and a static file cannot know the host it is being served from. A relative
+ * one parses as an error and the sitemap is simply never read.
+ */
+function mountRobots(app: Hono, options: DashboardOptions): void {
+  app.get('/robots.txt', (c) => {
+    c.header('Content-Type', 'text/plain; charset=utf-8');
+    return c.body(
+      ['User-agent: *', 'Allow: /', `Sitemap: ${origin(c, options.baseUrl)}/sitemap.xml`, ''].join(
+        '\n',
+      ),
+    );
+  });
+}
+
 function mountSitemap(app: Hono, options: DashboardOptions): void {
   app.get('/sitemap.xml', async (c) => {
     const base = origin(c, options.baseUrl);
@@ -368,6 +386,7 @@ export function mountDashboard(app: Hono, options: DashboardOptions): void {
   mountBump(app, options);
   mountAudit(app, options);
   mountPublished(app, options);
+  mountRobots(app, options);
   mountSitemap(app, options);
   mountHome(app, options);
 

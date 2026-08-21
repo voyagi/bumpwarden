@@ -597,7 +597,7 @@ a.plain {
   font-size: 12px;
   color: var(--ink-3);
 }
-.bandcard h4 {
+.bandcard h2 {
   font-family: var(--display);
   font-size: 19px;
   margin: 6px 0 8px;
@@ -841,6 +841,7 @@ a.plain {
   padding: 34px 30px;
   max-width: 68ch;
 }
+.state h1,
 .state h2 {
   font-family: var(--display);
   font-size: 24px;

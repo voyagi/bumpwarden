@@ -106,6 +106,7 @@ export function HomePage(props: HomeProps): JSX.Element {
   if (props.projects.length === 0) {
     return (
       <StatePanel
+        level={1}
         heading="No repository is being watched yet."
         lines={[
           'bumpwarden reads a watch list from its store. Add a repository and the next scheduled run picks it up, or set DEMO_REPO before the service boots and it arrives already watching that one.',
