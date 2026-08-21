@@ -72,19 +72,24 @@ only as a bar or a pin must still reach 3 to 1.
 
 ## 3. Type
 
-Three families, all free, self hosted at build time. Never Inter, Roboto, a system stack, or Space
-Grotesk. None of these were used in the retired direction.
+Two families, both free and self hosted at build time, chosen from a measured shortlist of the
+faces this audience's tools ship, not from taste. Never Inter, Roboto, a system stack, or Space
+Grotesk.
 
-| Role                                                  | Face                                      | Why                                                                                                                                  |
-| ----------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Display: headlines, the wordmark, card titles, totals | **Funnel Display** (OFL), `wght 300..800` | Carries the whole brand layer on its own. Distinctive without being costume, and tight enough at large sizes to hold a real headline |
-| Interface: body, rows, labels                         | **Figtree** (OFL), `wght 300..900`        | Quiet, wide aperture, reads cleanly at 13 to 15px in a dense table                                                                   |
-| Data: versions, scores, timestamps, rule ids          | **JetBrains Mono** (OFL), `wght 100..800` | Version strings and scores must align in a column, and it is the face this audience already reads all day                            |
+| Role                                                           | Face                                                         | Why                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Everything read as language: wordmark, headlines, rows, labels | **Mona Sans** (OFL, GitHub), `wght 200..900`, `wdth 75..125` | GitHub's own open source typeface. This product's output IS GitHub issues and pull requests and a user moves between the two all day, so it reads as native to the place it works. The width axis lets one family cover a tight headline and a comfortable table row, which is what the measured products all do |
+| Data: versions, scores, timestamps, rule ids                   | **JetBrains Mono** (OFL), `wght 100..800`                    | Version strings and scores must hold their column, and this audience already reads it in their editor. Measured in use at Railway and Raycast                                                                                                                                                                    |
+
+The first attempt used a display face, Funnel Display, for headlines. It did not hold up, and the
+evidence agrees: of thirteen products measured in this category, not one uses a characterful display
+face on the working surface. Personality is bought with weight, width, tracking and colour. If the
+typeface is what makes a design interesting, the design is not interesting enough yet.
 
 Scale, in px because this is an interface and not a document: 10.5 label, 12 mono meta, 13.5 dense
-body, 15 body, 16.5 lede, 19 total, 24 card title, clamp(29, 4vw, 46) headline. Tracking tightens
-as size grows: -0.035em on the headline, -0.025em on the wordmark, 0 on body, +0.1em on uppercase
-labels. Uppercase is for labels only and never for body text.
+body, 15 body, 16.5 lede, 19 total, 24 card title, clamp(29, 4vw, 46) headline. The headline takes
+weight 800 at width 92 percent with -0.028em tracking, the wordmark weight 800 at width 88 percent.
+Body sits at normal width. Uppercase is for labels only, at +0.1em, never for body text.
 
 ## 4. Structure
 

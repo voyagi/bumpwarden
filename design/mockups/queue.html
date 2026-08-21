@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Figtree:ital,wght@0,300..900&family=JetBrains+Mono:wght@100..800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wdth,wght@0,75..125,200..900&family=JetBrains+Mono:wght@100..800&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -29,8 +29,10 @@
         --r3: #c2410c;
         --r4: #b91c1c;
 
-        --display: 'Funnel Display', sans-serif;
-        --sans: 'Figtree', sans-serif;
+        /* One family across the whole range, which is what every product in the evidence table
+           does. Headlines take the tight width and the heavy weight, rows take normal width. */
+        --display: 'Mona Sans', sans-serif;
+        --sans: 'Mona Sans', sans-serif;
         --mono: 'JetBrains Mono', monospace;
       }
       * {
@@ -57,9 +59,10 @@
       }
       .logo {
         font-family: var(--display);
-        font-weight: 700;
+        font-weight: 800;
+        font-stretch: 88%;
         font-size: 20px;
-        letter-spacing: -0.025em;
+        letter-spacing: -0.02em;
       }
       .bar nav {
         display: flex;
@@ -87,9 +90,10 @@
       }
       h1 {
         font-family: var(--display);
-        font-weight: 700;
+        font-weight: 800;
+        font-stretch: 92%;
         font-size: clamp(29px, 4vw, 46px);
-        letter-spacing: -0.035em;
+        letter-spacing: -0.028em;
         line-height: 1.06;
         margin: 0;
         max-width: 21ch;
