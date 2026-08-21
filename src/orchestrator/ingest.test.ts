@@ -175,6 +175,44 @@ describe('ingestRepository', () => {
     expect(result.missing.map((m) => m.what)).toContain('express release notes');
   });
 
+  it('still charges for a deprecated installed version when deps.dev is unavailable', async () => {
+    const routes = happyRoutes().filter(
+      (route) => !route.match('/packages/express/versions/4.18.2'),
+    );
+    const registry = routes.find((route) => route.match('registry.npmjs.org/express'));
+    routes[routes.indexOf(registry!)] = {
+      match: urlContains('registry.npmjs.org/express'),
+      step: json({
+        'dist-tags': { latest: '5.2.1' },
+        versions: {
+          '4.18.2': { deprecated: 'no longer supported' },
+          '5.2.1': { engines: { node: '>= 18' } },
+        },
+        time: { '5.2.1': '2025-12-01T00:00:00Z' },
+        repository: { url: 'git+https://github.com/expressjs/express.git' },
+      }),
+    };
+    const { fetcher } = fetcherWith(routes);
+
+    const result = await ingestRepository(fetcher, TARGET, { sourceFiles: [ROUTE_FILE] });
+
+    expect(result.bumps[0]?.currentDeprecated).toBe(true);
+  });
+
+  it('says so when a lockfile is read but yields nothing', async () => {
+    const routes = happyRoutes().filter((route) => !route.match('/contents/package-lock.json'));
+    routes.push({
+      match: urlContains('/contents/package-lock.json'),
+      step: contents({ packages: {} }),
+    });
+    const { fetcher } = fetcherWith(routes);
+
+    const result = await ingestRepository(fetcher, TARGET, { sourceFiles: [] });
+
+    expect(result.lockfile).toBe('npm');
+    expect(result.missing.some((m) => m.why.includes('yielded no versions'))).toBe(true);
+  });
+
   it('records an unsupported lockfile and falls back to the range floor', async () => {
     const routes = happyRoutes().filter((route) => !route.match('/contents/package-lock.json'));
     routes.push({

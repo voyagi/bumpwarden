@@ -3,7 +3,12 @@ import { classifyUsage, type SourceFile } from '../core/usage.js';
 import { fetchAdvisory, fetchVersionFacts } from '../io/depsdev.js';
 import { compareTags, fetchReleaseNotes, fetchTextFile, type RepoRef } from '../io/github.js';
 import type { RunFetcher } from '../io/http.js';
-import { fetchPackument, githubRepoFrom, resolveCandidate } from '../io/npm.js';
+import {
+  fetchPackument,
+  githubRepoFrom,
+  isVersionDeprecated,
+  resolveCandidate,
+} from '../io/npm.js';
 import {
   LOCKFILES,
   parseManifest,
@@ -52,7 +57,15 @@ async function readLockfile(
       });
       return { kind, installed: new Map() };
     }
-    return { kind, installed: parseNpmLock(result.value) };
+
+    const installed = parseNpmLock(result.value);
+    if (installed.size === 0) {
+      // A lockfile that yields nothing looks exactly like no lockfile downstream, and the range
+      // floor it falls back to overstates every semver distance. Say so rather than let the
+      // dashboard imply these versions were read.
+      missing.push({ what: path, why: 'read but yielded no versions, so ranges are the fallback' });
+    }
+    return { kind, installed };
   }
 
   missing.push({ what: 'lockfile', why: 'no lockfile found on the default branch' });
@@ -158,7 +171,11 @@ async function bumpFor(
     candidateVersion: candidate.version,
     candidatePublishedAt:
       (candidateFacts.ok ? candidateFacts.value.publishedAt : null) ?? candidate.publishedAt ?? '',
-    currentDeprecated: currentFacts.ok ? currentFacts.value.isDeprecated : false,
+    // Two sources for the same fact on purpose: the registry already carries it, so a deps.dev
+    // outage must not quietly drop the ten points an installed deprecated version is worth.
+    currentDeprecated:
+      (currentFacts.ok && currentFacts.value.isDeprecated) ||
+      isVersionDeprecated(packument.value, installed.version),
     candidateDeprecated:
       candidate.deprecated || (candidateFacts.ok ? candidateFacts.value.isDeprecated : false),
     advisories: candidateFacts.ok
