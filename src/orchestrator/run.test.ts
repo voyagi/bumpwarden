@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BriefEngine } from '../agent/write-brief.js';
+import { PER_RUN_BUDGETS } from '../core/policy.js';
 import type { RunRecord } from '../core/records.js';
 import { RepositoryActor } from '../io/github-actor.js';
 import { RunFetcher } from '../io/http.js';
@@ -8,7 +9,7 @@ import type { BumpwardenStore } from '../io/store.js';
 import { fakeGitHub, type FakeGitHub } from '../testkit/fake-github.js';
 import { DEMO, MANIFEST_JSON, NOW } from '../testkit/fixtures.js';
 import { json, routedFetch, urlContains, type Route } from '../testkit/scripted-fetch.js';
-import { executeRun, type RunDependencies } from './run.js';
+import { executeRun, resolveBudgets, type RunDependencies } from './run.js';
 
 const MANIFEST = {
   name: 'demo-app',
@@ -303,6 +304,22 @@ describe('a second run', () => {
 });
 
 describe('budgets and failures', () => {
+  it('spends exactly what the Policy page publishes when a caller names no budget', () => {
+    // The page tells a reader a run takes at most this many actions. A default that drifted from
+    // it would make the published policy a claim about nothing.
+    expect(resolveBudgets({ trigger: 'scheduled' })).toEqual({
+      brief: PER_RUN_BUDGETS.briefs,
+      action: PER_RUN_BUDGETS.actions,
+    });
+  });
+
+  it('lets a caller ask for less, including none at all', () => {
+    expect(resolveBudgets({ trigger: 'manual', briefBudget: 0, actionBudget: 3 })).toEqual({
+      brief: 0,
+      action: 3,
+    });
+  });
+
   it('records a brief as unavailable when no Gemini key is configured', async () => {
     const context = await harness({ engine: null });
     await executeRun(context.deps, { trigger: 'scheduled' });

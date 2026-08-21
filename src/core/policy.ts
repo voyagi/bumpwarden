@@ -17,6 +17,27 @@ export type ActionKind = 'pull-request' | 'issue' | 'hold-issue' | 'comment-on-b
 
 export const LABEL_ROOT = 'bumpwarden';
 
+/**
+ * Two budgets, both per run, and both published. Briefs cost Gemini tokens, and a first run over a
+ * neglected repository would otherwise open dozens of issues at once, which is how a helpful bot
+ * becomes one a maintainer blocks. Bumps are handled in descending score order, so whatever a
+ * budget cuts is always the least risky end of the queue, and every cut is recorded as a skipped
+ * action carried to the next run. They live here rather than beside the run loop because the Policy
+ * page publishes them: a number a reader is told and a number the code obeys must be one number.
+ */
+export const PER_RUN_BUDGETS = {
+  briefs: 20,
+  actions: 10,
+} as const;
+
+/**
+ * The one sentence a green bump's pull request and the Policy page must agree on. bumpwarden edits
+ * the manifest and stops: running someone else's package manager against their lockfile is a build
+ * bumpwarden cannot verify, so it does not pretend to.
+ */
+export const LOCKFILE_POLICY =
+  'The lockfile is not regenerated here, because bumpwarden does not run your package manager.';
+
 export interface PolicyRule {
   id: PolicyRuleId;
   band: Band;

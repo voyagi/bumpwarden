@@ -64,12 +64,14 @@ describe('project summaries', () => {
       lastRunStatus: 'finished',
       counts: { green: 1, amber: 2, red: 3 },
       actions: 4,
+      worstScore: 87,
     };
 
     expect(projectSummaryFor(DEMO, existing)).toMatchObject({
       lastRunId: 'run-1',
       counts: { green: 1, amber: 2, red: 3 },
       actions: 4,
+      worstScore: 87,
     });
   });
 });

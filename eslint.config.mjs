@@ -13,6 +13,8 @@ export default tseslint.config(
       'dist/**',
       'coverage/**',
       'node_modules/**',
+      // Dot-directories hold tooling and local scratch, never part of the product.
+      '**/.*/**',
       '**/*.config.{ts,js,mjs,cjs}',
       'scripts/check-client-secrets.mjs',
       'scripts/check-client-secrets.mutants.mjs',
@@ -36,6 +38,12 @@ export default tseslint.config(
       complexity: 'off',
       'sonarjs/cognitive-complexity': 'off',
     },
+  },
+  {
+    // The one script that ships to a browser. It is linted like the rest of the product rather
+    // than left as untyped text nothing checks.
+    files: ['public/**/*.js'],
+    languageOptions: { globals: { ...globals.browser } },
   },
   {
     // Tooling that must stay CommonJS (dependency-cruiser reads a .cjs config).

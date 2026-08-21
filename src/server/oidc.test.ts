@@ -1,34 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { RunRecord } from '../core/records.js';
+import { runRecord } from '../testkit/fixtures.js';
 import { authorizeRun, type IdTokenClaims, type RunAuthConfig } from './oidc.js';
 import { createApp } from './app.js';
 
 const INVOKER = 'bumpwarden-runner@demo.iam.gserviceaccount.com';
-
-function runRecord(): RunRecord {
-  return {
-    id: 'run-20260821T060000000Z-scheduled',
-    trigger: 'scheduled',
-    status: 'finished',
-    startedAt: '2026-08-21T06:00:00.000Z',
-    finishedAt: '2026-08-21T06:01:00.000Z',
-    repositories: [
-      {
-        repositoryId: 'demo/app',
-        dependenciesConsidered: 1,
-        counts: { green: 1, amber: 0, red: 0 },
-        actions: 1,
-        missing: [],
-        error: null,
-      },
-    ],
-    counts: { green: 1, amber: 0, red: 0 },
-    actionsTaken: 1,
-    rubricVersion: '1.0.0',
-    policyVersion: '1.0.0',
-    error: null,
-  };
-}
 
 function config(
   overrides: Partial<RunAuthConfig> = {},
@@ -150,9 +125,9 @@ describe('the run route', () => {
       caller: INVOKER,
       runId: runRecord().id,
       status: 'finished',
-      counts: { green: 1, amber: 0, red: 0 },
-      actionsTaken: 1,
-      repositories: 1,
+      counts: runRecord().counts,
+      actionsTaken: runRecord().actionsTaken,
+      repositories: runRecord().repositories.length,
     });
     expect(startRun).toHaveBeenCalledWith({ trigger: 'scheduled' });
   });

@@ -1,7 +1,8 @@
 import { BRIEF_SCHEMA_VERSION, briefCacheKey, type BriefRecord } from '../core/brief.js';
 import { bumpKey } from '../core/bump-key.js';
-import type { BumpSummary } from '../core/issue-body.js';
-import type { WatchedRepository } from '../core/records.js';
+import { bumpTitle, type BumpSummary } from '../core/issue-body.js';
+import { POLICY_VERSION } from '../core/policy.js';
+import type { ActionRecord, BumpRecord, RunRecord, WatchedRepository } from '../core/records.js';
 import { RUBRIC_VERSION } from '../core/rubric.js';
 import { scoreBump } from '../core/scorer.js';
 import type { CandidateBump, Score } from '../core/types.js';
@@ -107,6 +108,74 @@ export function readyBrief(overrides: Partial<BriefRecord> = {}): BriefRecord {
       migrationSteps: ['Rename res.sendfile to res.sendFile on line 18.'],
       confidence: 'high',
     },
+    ...overrides,
+  };
+}
+
+export const RUN_ID = 'run-20260821T060000000Z-scheduled';
+
+export function runRecord(overrides: Partial<RunRecord> = {}): RunRecord {
+  return {
+    id: RUN_ID,
+    trigger: 'scheduled',
+    status: 'finished',
+    scope: null,
+    startedAt: '2026-08-21T06:00:00.000Z',
+    finishedAt: '2026-08-21T06:02:00.000Z',
+    repositories: [
+      {
+        repositoryId: DEMO.id,
+        dependenciesConsidered: 4,
+        counts: { green: 1, amber: 1, red: 1 },
+        actions: 3,
+        missing: [{ what: 'lockfile', why: 'none on the default branch' }],
+        error: null,
+      },
+    ],
+    counts: { green: 1, amber: 1, red: 1 },
+    actionsTaken: 3,
+    rubricVersion: RUBRIC_VERSION,
+    policyVersion: POLICY_VERSION,
+    error: null,
+    ...overrides,
+  };
+}
+
+export function bumpRecord(overrides: Partial<BumpRecord> = {}): BumpRecord {
+  const bump = summaryOf();
+  return {
+    key: bump.key,
+    runId: RUN_ID,
+    repositoryId: DEMO.id,
+    dependency: bump.dependency,
+    currentVersion: bump.currentVersion,
+    candidateVersion: bump.candidateVersion,
+    score: scoreOf(),
+    brief: readyBrief(),
+    action: null,
+    firstSeenAt: NOW.toISOString(),
+    updatedAt: NOW.toISOString(),
+    ...overrides,
+  };
+}
+
+export function actionRecord(overrides: Partial<ActionRecord> = {}): ActionRecord {
+  const bump = summaryOf();
+  return {
+    id: `${RUN_ID}|${bump.key}`,
+    bumpKey: bump.key,
+    bumpTitle: bumpTitle(bump),
+    repositoryId: DEMO.id,
+    runId: RUN_ID,
+    ruleId: 'RED-HOLD-1',
+    kind: 'hold-issue',
+    outcome: 'opened',
+    url: 'https://github.com/demo/app/issues/38',
+    number: 38,
+    at: NOW.toISOString(),
+    detail: 'opened issue #38',
+    score: scoreOf().total,
+    band: scoreOf().band,
     ...overrides,
   };
 }

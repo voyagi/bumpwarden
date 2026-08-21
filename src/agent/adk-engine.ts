@@ -9,11 +9,12 @@ import {
   type ToolUnion,
 } from '@google/adk';
 import { briefModelSchema } from '../core/brief.js';
+import { BRIEF_MODEL } from '../core/stack.js';
 import { briefInstruction, briefMessage, type BriefMaterial, type BriefRequest } from './prompt.js';
 import type { BriefEngine } from './write-brief.js';
 
-/** GA, on the free tier, and the smallest model that reads a changelog well. */
-export const DEFAULT_BRIEF_MODEL = 'gemini-3.5-flash';
+/** The model the About page names, so the page and the call cannot drift apart. */
+export const DEFAULT_BRIEF_MODEL = BRIEF_MODEL;
 
 const APP_NAME = 'bumpwarden';
 const USER_ID = 'bumpwarden-run';

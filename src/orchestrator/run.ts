@@ -2,8 +2,8 @@ import { writeBrief, type BriefEngine } from '../agent/write-brief.js';
 import type { BriefRequest } from '../agent/prompt.js';
 import { briefCacheKey, unavailableBrief, type BriefRecord } from '../core/brief.js';
 import { bumpKey } from '../core/bump-key.js';
-import type { BumpSummary } from '../core/issue-body.js';
-import { LABEL_ROOT, POLICY_VERSION, ruleFor } from '../core/policy.js';
+import { bumpTitle, type BumpSummary } from '../core/issue-body.js';
+import { LABEL_ROOT, PER_RUN_BUDGETS, POLICY_VERSION, ruleFor } from '../core/policy.js';
 import {
   ZERO_COUNTS,
   actionIdFor,
@@ -31,15 +31,6 @@ import { ingestRepository } from './ingest.js';
 import { collectSourceFiles } from './source-files.js';
 
 /**
- * Two budgets, both per run. Briefs cost Gemini tokens, and a first run over a neglected repository
- * would otherwise open dozens of issues at once, which is how a helpful bot becomes one a
- * maintainer blocks. Bumps are handled in descending score order, so whatever the budgets cut is
- * always the least risky end of the queue, and every cut is recorded.
- */
-const DEFAULT_BRIEF_BUDGET = 20;
-const DEFAULT_ACTION_BUDGET = 10;
-
-/**
  * What the dashboard's "actions" number counts. A dry run, a skip and a failure are all recorded in
  * the audit log, but none of them changed anything on GitHub, so none of them is an action taken.
  */
@@ -52,6 +43,18 @@ export interface RunOptions {
   maxDependencies?: number;
   briefBudget?: number;
   actionBudget?: number;
+}
+
+/**
+ * What a run will actually spend, resolved in one place. The Policy page publishes these numbers,
+ * so the defaults are the published constants rather than literals sitting next to a `??`, and
+ * `run.test.ts` pins the two together.
+ */
+export function resolveBudgets(options: RunOptions): { brief: number; action: number } {
+  return {
+    brief: options.briefBudget ?? PER_RUN_BUDGETS.briefs,
+    action: options.actionBudget ?? PER_RUN_BUDGETS.actions,
+  };
 }
 
 export interface RunDependencies {
@@ -136,6 +139,7 @@ function skippedAction(runId: string, bump: BumpSummary, score: Score, at: Date)
   return {
     id: actionIdFor(runId, bump.key),
     bumpKey: bump.key,
+    bumpTitle: bumpTitle(bump),
     repositoryId: bump.repositoryId,
     runId,
     ruleId: rule.id,
@@ -145,6 +149,8 @@ function skippedAction(runId: string, bump: BumpSummary, score: Score, at: Date)
     number: null,
     at: at.toISOString(),
     detail: 'over the per-run action budget, carried to the next run',
+    score: score.total,
+    band: score.band,
   };
 }
 
@@ -264,8 +270,7 @@ async function runRepository(
     .map((candidate) => ({ candidate, score: scoreBump(candidate, at) }))
     .sort((left, right) => right.score.total - left.score.total);
 
-  const briefBudget = options.briefBudget ?? DEFAULT_BRIEF_BUDGET;
-  const actionBudget = options.actionBudget ?? DEFAULT_ACTION_BUDGET;
+  const { brief: briefBudget, action: actionBudget } = resolveBudgets(options);
   let actions = 0;
 
   for (const [index, entry] of scored.entries()) {
@@ -299,6 +304,7 @@ async function runRepository(
     lastRunStatus: 'finished',
     counts,
     actions,
+    worstScore: scored[0]?.score.total ?? 0,
   });
 
   return result;
@@ -322,6 +328,7 @@ export async function executeRun(deps: RunDependencies, options: RunOptions): Pr
     id,
     trigger: options.trigger,
     status: 'running',
+    scope: options.repositoryId ?? null,
     startedAt: startedAt.toISOString(),
     finishedAt: null,
     repositories: [],

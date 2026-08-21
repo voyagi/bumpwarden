@@ -31,9 +31,18 @@ export interface BodyInput {
   dashboardUrl: string | null;
 }
 
+/**
+ * How a bump is named everywhere a reader meets it: an issue title, an audit row, a page heading.
+ * The audit log stores it with the action rather than looking the bump up per row, which is what
+ * keeps the page one read instead of one read per line.
+ */
+export function bumpTitle(bump: BumpSummary): string {
+  return `${bump.dependency} ${bump.currentVersion} to ${bump.candidateVersion}`;
+}
+
 export function issueTitle(bump: BumpSummary, score: Score): string {
   const verdict = VERDICT_WORD[score.band].toLowerCase();
-  return `${bump.dependency} ${bump.currentVersion} to ${bump.candidateVersion}: ${verdict}, scored ${score.total}`;
+  return `${bumpTitle(bump)}: ${verdict}, scored ${score.total}`;
 }
 
 export function pullRequestTitle(bump: BumpSummary): string {

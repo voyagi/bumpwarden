@@ -12,6 +12,7 @@
     "dev": "tsx watch --env-file-if-exists=.env src/server/index.tsx",
     "smoke:brief": "tsx --env-file-if-exists=.env src/smoke/main.ts",
     "emulator": "firebase emulators:start --only firestore --project demo-bumpwarden",
+    "docs:diagram": "tsx src/tools/diagram/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",

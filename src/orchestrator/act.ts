@@ -4,6 +4,7 @@ import {
   actionBody,
   botCommentBody,
   branchName,
+  bumpTitle,
   issueTitle,
   pullRequestTitle,
   type BodyInput,
@@ -11,6 +12,7 @@ import {
 } from '../core/issue-body.js';
 import { bumpManifestRange } from '../core/manifest-edit.js';
 import {
+  LOCKFILE_POLICY,
   POLICY_VERSION,
   decideAction,
   ruleFor,
@@ -153,7 +155,7 @@ async function upsertIssue(
 function manifestNote(from: string, to: string, dependency: string): string {
   return [
     `\`${MANIFEST}\`: \`${dependency}\` moves from \`${from}\` to \`${to}\`.`,
-    'The lockfile is not regenerated here, because bumpwarden does not run your package manager.',
+    LOCKFILE_POLICY,
     'Run `npm install` on this branch before merging so the lockfile matches.',
   ].join(' ');
 }
@@ -273,9 +275,12 @@ export async function actOnBump(context: ActContext, inputs: ActInputs): Promise
   const base = {
     id: actionIdFor(context.runId, inputs.bump.key),
     bumpKey: inputs.bump.key,
+    bumpTitle: bumpTitle(inputs.bump),
     repositoryId: inputs.bump.repositoryId,
     runId: context.runId,
     at,
+    score: inputs.score.total,
+    band: inputs.score.band,
   };
 
   try {

@@ -1,8 +1,18 @@
 import { Firestore } from '@google-cloud/firestore';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { unavailableBrief, type BriefRecord } from '../core/brief.js';
-import type { ActionRecord, BumpRecord, RunRecord } from '../core/records.js';
-import { DEMO, NOW, candidateBump, readyBrief, scoreOf, summaryOf } from '../testkit/fixtures.js';
+import type { BumpRecord } from '../core/records.js';
+import {
+  DEMO,
+  NOW,
+  actionRecord,
+  bumpRecord,
+  candidateBump,
+  readyBrief,
+  runRecord,
+  scoreOf,
+  summaryOf,
+} from '../testkit/fixtures.js';
 import { FirestoreStore } from './firestore-store.js';
 import { MemoryStore } from './memory-store.js';
 import type { BumpwardenStore } from './store.js';
@@ -10,67 +20,6 @@ import type { BumpwardenStore } from './store.js';
 const EMULATOR = process.env.FIRESTORE_EMULATOR_HOST;
 /** The `demo-` prefix is Firebase's marker for a project with no live resources behind it. */
 const EMULATOR_PROJECT = 'demo-bumpwarden';
-
-function runRecord(overrides: Partial<RunRecord> = {}): RunRecord {
-  return {
-    id: 'run-20260821T060000000Z-scheduled',
-    trigger: 'scheduled',
-    status: 'finished',
-    startedAt: '2026-08-21T06:00:00.000Z',
-    finishedAt: '2026-08-21T06:02:00.000Z',
-    repositories: [
-      {
-        repositoryId: DEMO.id,
-        dependenciesConsidered: 4,
-        counts: { green: 1, amber: 1, red: 1 },
-        actions: 3,
-        missing: [{ what: 'lockfile', why: 'none on the default branch' }],
-        error: null,
-      },
-    ],
-    counts: { green: 1, amber: 1, red: 1 },
-    actionsTaken: 3,
-    rubricVersion: '1.0.0',
-    policyVersion: '1.0.0',
-    error: null,
-    ...overrides,
-  };
-}
-
-function bumpRecord(overrides: Partial<BumpRecord> = {}): BumpRecord {
-  const bump = summaryOf();
-  return {
-    key: bump.key,
-    runId: runRecord().id,
-    repositoryId: DEMO.id,
-    dependency: bump.dependency,
-    currentVersion: bump.currentVersion,
-    candidateVersion: bump.candidateVersion,
-    score: scoreOf(),
-    brief: readyBrief(),
-    action: null,
-    firstSeenAt: NOW.toISOString(),
-    updatedAt: NOW.toISOString(),
-    ...overrides,
-  };
-}
-
-function actionRecord(overrides: Partial<ActionRecord> = {}): ActionRecord {
-  return {
-    id: `${runRecord().id}|${summaryOf().key}`,
-    bumpKey: summaryOf().key,
-    repositoryId: DEMO.id,
-    runId: runRecord().id,
-    ruleId: 'RED-HOLD-1',
-    kind: 'hold-issue',
-    outcome: 'opened',
-    url: 'https://github.com/demo/app/issues/38',
-    number: 38,
-    at: NOW.toISOString(),
-    detail: 'opened issue #38',
-    ...overrides,
-  };
-}
 
 function greenBump(): BumpRecord {
   const green = candidateBump({
@@ -124,6 +73,7 @@ function storeContract(name: string, create: () => Promise<BumpwardenStore>): vo
         lastRunStatus: 'finished',
         counts: { green: 2, amber: 0, red: 1 },
         actions: 3,
+        worstScore: 74,
       });
       await store.putWatchedRepository(DEMO);
 

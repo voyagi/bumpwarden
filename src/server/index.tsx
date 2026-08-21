@@ -67,6 +67,8 @@ const app = createApp({
     verify: googleTokenVerifier(),
   },
   startRun: (options) => executeRun(dependencies, options),
+  store,
+  baseUrl: env.SERVICE_BASE_URL ?? null,
 });
 
 await seedDemoRepository();

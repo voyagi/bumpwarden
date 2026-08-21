@@ -55,6 +55,12 @@ export interface RunRecord {
   id: string;
   trigger: Trigger;
   status: RunStatus;
+  /**
+   * The repository a manual run was scoped to, null for the whole watch list. A running run has no
+   * results yet, so this is the only thing that tells the dashboard which project's Run now button
+   * is currently busy.
+   */
+  scope: string | null;
   startedAt: string;
   finishedAt: string | null;
   repositories: RepositoryResult[];
@@ -73,6 +79,8 @@ export interface RunRecord {
 export interface ActionRecord {
   id: string;
   bumpKey: string;
+  /** `express 4.18.2 to 5.2.1`, stored so the audit log renders without a read per row. */
+  bumpTitle: string;
   repositoryId: string;
   runId: string;
   ruleId: PolicyRuleId;
@@ -82,6 +90,13 @@ export interface ActionRecord {
   number: number | null;
   at: string;
   detail: string;
+  /**
+   * The score that decided this action, stored with it. An audit entry that cannot say how risky
+   * the bump was is a log line rather than an audit, and re-reading the bump per row is the read
+   * fan-out the store exists to avoid.
+   */
+  score: number;
+  band: Band;
 }
 
 export interface BumpRecord {
@@ -105,6 +120,8 @@ export interface ProjectSummary {
   lastRunStatus: RunStatus | null;
   counts: BandCounts;
   actions: number;
+  /** The highest score in the last run, so Home shows a reading rather than only a tally. */
+  worstScore: number;
 }
 
 /**
@@ -123,7 +140,15 @@ export function projectSummaryFor(
     lastRunStatus: existing?.lastRunStatus ?? null,
     counts: existing?.counts ?? { ...ZERO_COUNTS },
     actions: existing?.actions ?? 0,
+    worstScore: existing?.worstScore ?? 0,
   };
+}
+
+/** The band a project reads as overall: the worst one present, since that is what needs a person. */
+export function worstBand(counts: BandCounts): Band {
+  if (counts.red > 0) return 'red';
+  if (counts.amber > 0) return 'amber';
+  return 'green';
 }
 
 function compactTimestamp(at: Date): string {
