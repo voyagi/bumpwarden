@@ -1,264 +1,160 @@
 # bumpwarden art direction
 
-> **RETIRED 2026-08-21, the same day it was locked. Do not build pages from this document.**
->
-> Set beside two earlier products, this direction turned out to be the same design three
-> times over: a mid-century industrial operations room, a dark saturated ground with a warm cream
-> reading surface and signal accents, and an interface pretending to be a physical panel holding
-> tokens. It also reads as dated, which is the same root cause rather than a second one.
->
-> The research that should have driven it has since been done, against three products this
-> audience actually uses. Linear runs InterVariable on near-black `#08090a` with 5 to 8px radii and
-> a fine-grained size ladder. Sentry runs Rubik with a characterful display face reserved for the
-> brand layer. Aikido, the nearest category product, runs New Grotesk in five weights. In this
-> category the working surface is quiet, dense and fast, and the personality lives in the brand
-> layer. This document inverted that: it dressed the table people have to read every day in a
-> costume.
->
-> The replacement is derived from that audience instead. Until it lands, no page code. This file is
-> kept rather than deleted so the reasoning survives and the mistake is not repeated.
+Locked 2026-08-21, second attempt. The first is kept at `ART-DIRECTION-retired.md` with the reason
+it failed. Every page derives from this document. If a screen disagrees with this file, the screen
+is wrong.
 
-Locked 2026-08-21. Every page derives from this document. If a screen disagrees with this file,
-the screen is wrong.
+## 0. Who this is for, and what they already use
 
-Two directions were drawn and rendered as working pages before this was locked: a 1960s electric
-route panel in panel blue and instrument white, and the mechanical lever frame below. The panel
-version was clear and competent and looked like every other operations product, so it lost. Its
-best ideas were kept and are marked where they appear.
+This direction is derived from the audience rather than from a period or a mood. The evidence was
+pulled from the real, live stylesheets of three products this audience opens every week, on
+2026-08-21.
+
+| Product                                       | What it actually uses                                                                                                     | What it tells us                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Linear                                        | InterVariable, near-black `#08090a`, radii 5 to 8px, a token ladder of micro, mini, small, regular plus eight title steps | The quality bar this audience names out loud is quiet, dense and fast               |
+| Sentry                                        | Rubik in four weights, a display face reserved for the brand layer, three separate monospace stacks                       | Personality is allowed, and it lives in the brand layer, not in the working surface |
+| Aikido Security, the nearest category product | New Grotesk in five weights                                                                                               | The category reads as contemporary. Nothing retro, nothing decorative               |
+
+**The finding that decided everything below:** in this category the working surface stays quiet,
+dense and fast, and the personality belongs to the brand layer. A developer scanning a queue of
+pending upgrades wants to finish, not to admire the furniture. The retired direction inverted this
+by dressing the table people read every day in a costume, which is why it read as both dated and
+interchangeable with the two products before it.
 
 ## 1. Anchor
 
-**The mechanical signal box: a lever frame, its locking table, and the printed notice board,
-read through the 1965 British Rail corporate identity.**
+**Measurement, published and checkable. The instrument is the argument.**
 
-Not railways in general. Specifically the pre-electric box, where a signalman pulls painted steel
-levers and a mechanical interlocking makes a conflicting movement physically impossible, and where
-the rule that forbids it is written out in a locking table anyone can read.
+Not a place and not a period. The anchor is a discipline: the way a trustworthy measurement is
+presented, where the scale, the thresholds and the method are shown next to the reading so the
+reader can check the work rather than take it on faith.
 
-That is this product's claim, not a costume. bumpwarden says the verdict is deterministic and the
-machine only explains. A signal box is the oldest working example of exactly that: authority is
-granted by a published rule, not by judgement, and the rule is auditable. The vocabulary already
-matches. A three aspect signal shows green for clear, yellow for caution and red for danger
-([Railway News](https://railwaynews.net/wiki/railway-signal-colours-aspects-meaning-explained)),
-which is bumpwarden's three bands. A lever frame is colour coded by what each lever controls, red
-for stop signals, yellow for distant signals, black for points, blue for facing point locks, brown
-for gate locks, white for spare
-([WBS frame](https://www.wbsframe.mste.co.uk/public/Lever_Colours.html)), which is colour as
-published meaning rather than decoration. The 1965 identity supplies the typographic discipline:
-one standardised colour and one lettering system across an entire network, set down in a four
-volume manual by the Design Research Unit
-([Wikipedia](https://en.wikipedia.org/wiki/British_Rail_Corporate_Identity_Manual)).
+Why it belongs to this product specifically. bumpwarden's one sharp claim is that the verdict is
+arithmetic from a published rubric and the machine only explains. Every competitor hides its
+number. Renovate's Merge Confidence algorithm is private. Dependabot's compatibility score is a
+percentage with no method attached. So the product's differentiator and its visual system are the
+same thing: show the scale, mark the thresholds, place the reading on it, and let anyone audit the
+sum. That cannot be lifted onto another product, which is the test that the retired direction
+failed.
 
-Victorian mechanism, 1965 typography. That pairing is the anchor.
+## 2. The colour law
 
-## 2. Type
+**Colour means risk. Nothing else in this product is coloured.**
 
-Three families, all free and self hosted at build time. Never Inter, Roboto, a system stack, or
-Space Grotesk.
+The wordmark, the navigation, the type, the rules, the chrome and the buttons are monochrome. The
+only saturated pixels on any screen belong to a score, a band, or a factor's contribution to a
+score. Follow this and the eye is pulled only toward something that earned it, which is exactly
+what a triage tool is for.
 
-| Role                                                 | Face                                                                                                                                 | Why                                                                                                                                                                                                               |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Display: page titles, lever plates, dependency names | **Archivo** (OFL, Omnibus Type, Héctor Gatti and team), variable `wdth 62..125`, `wght 100..900`                                     | Drawn for highlights and headlines and reminiscent of late nineteenth century American grotesques, which is the register of a cast plate. The width axis is what makes a plate read as stamped rather than typed. |
-| Interface: body, tables, controls                    | **Overpass** (OFL, Delve Withrington and Dave Bailey)                                                                                | Drawn from the Highway Gothic series, so it carries transport lettering DNA with wide apertures that survive small sizes in a dense frame.                                                                        |
-| Data: versions, scores, timestamps, rule ids         | **Overpass Mono** (OFL)                                                                                                              | Same skeleton as Overpass, so a version string beside prose does not break the line. Tabular by construction.                                                                                                     |
-| Notices: the generated brief, quoted upstream text   | **Newsreader** (OFL, Production Type, commissioned by Google Fonts for longer-form on-screen reading), `opsz 6..72`, `wght 200..800` | The brief is somebody else's words pinned to a board, and a book serif says that before you read a word of it. The optical size axis keeps a quoted excerpt readable at 15px and a heading right at 22px.         |
+This is also the reason there is no brand accent colour. A brand blue sitting next to a risk red
+would teach the eye that colour is decoration. It is not.
 
-Scale, root 16px, tabular numerals on everywhere numbers line up:
+| Name   | Hex       | Role                                       |
+| ------ | --------- | ------------------------------------------ |
+| Ground | `#FAFAF9` | Page background                            |
+| Panel  | `#FFFFFF` | Reading surfaces                           |
+| Ink    | `#14181B` | Primary text, the wordmark, the total rule |
+| Ink 2  | `#5A6469` | Secondary text                             |
+| Ink 3  | `#8B959A` | Labels, axis annotations, spent factors    |
+| Rule   | `#E6E8E7` | Borders                                    |
+| Rule 2 | `#F0F2F1` | Row separators                             |
+| Risk 0 | `#0F766E` | Clear, the low end of the ramp             |
+| Risk 1 | `#4D7C3F` | Ramp step                                  |
+| Risk 2 | `#B7791F` | Caution                                    |
+| Risk 3 | `#C2410C` | Caution wording, factor bars               |
+| Risk 4 | `#B91C1C` | Held, the high end of the ramp             |
 
-| Token       | Size             | Use                                    |
-| ----------- | ---------------- | -------------------------------------- |
-| `--t-plate` | 0.6875rem (11px) | plate captions, column heads, eyebrows |
-| `--t-meta`  | 0.8125rem (13px) | table meta, versions, timestamps       |
-| `--t-body`  | 0.9375rem (15px) | interface body                         |
-| `--t-lead`  | 1.0625rem (17px) | lede, notice body                      |
-| `--t-head`  | 1.375rem (22px)  | section heads                          |
-| `--t-page`  | 2rem (32px)      | page title                             |
-| `--t-board` | 3.25rem (52px)   | board title                            |
-| `--t-score` | 5rem (80px)      | the score numeral on bump detail       |
+The five risk values are a continuous ramp, not five badges. A score sits somewhere along it, and
+the band words Clear, Caution and Held name where. Contrast is measured, not asserted, before this
+ships: every risk value must reach at least 4.5 to 1 against Panel at text size, and any value used
+only as a bar or a pin must still reach 3 to 1.
 
-Line height 1.1 on display, 1.45 on body, 1.3 in tables. Weights: Archivo 700 for plates and
-titles, 800 only for the score numeral. Overpass 400 and 600, nothing lighter.
+## 3. Type
 
-Case: uppercase with 0.14em to 0.18em tracking on plates, column heads and eyebrows only. Sentence
-case everywhere else. Body text is never uppercase. Package names, versions, paths and rule ids are
-reproduced exactly as their source spells them.
+Three families, all free, self hosted at build time. Never Inter, Roboto, a system stack, or Space
+Grotesk. None of these were used in the retired direction.
 
-## 3. Palette
+| Role                                                  | Face                                      | Why                                                                                                                                  |
+| ----------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Display: headlines, the wordmark, card titles, totals | **Funnel Display** (OFL), `wght 300..800` | Carries the whole brand layer on its own. Distinctive without being costume, and tight enough at large sizes to hold a real headline |
+| Interface: body, rows, labels                         | **Figtree** (OFL), `wght 300..900`        | Quiet, wide aperture, reads cleanly at 13 to 15px in a dense table                                                                   |
+| Data: versions, scores, timestamps, rule ids          | **JetBrains Mono** (OFL), `wght 100..800` | Version strings and scores must align in a column, and it is the face this audience already reads all day                            |
 
-One dominant colour, the deep green a lever frame and a box interior are painted, with brass,
-enamel bone, and the three lamp colours as sharp accents.
-
-| Name          | Hex       | Role                                                             |
-| ------------- | --------- | ---------------------------------------------------------------- |
-| Frame Green   | `#14352B` | dominant. The rail, the block shelf, the score plate, buttons    |
-| Night Block   | `#0C201A` | the dark theme field, the box after dark                         |
-| Enamel Bone   | `#F2E9D8` | the light theme field, and all text on green                     |
-| Bone Muted    | `#B9A98C` | secondary text on green                                          |
-| Brass         | `#C9922E` | rules, dividers, cast number plates, focus rings, links on green |
-| Brass Dim     | `#8A6A2A` | heavier rules and plate shading                                  |
-| Points Black  | `#1A1A17` | text on bone, and on amber and clear fills                       |
-| Lock Blue     | `#2C5C8A` | links on bone only, and the model spur in the schematic          |
-| Stop Red      | `#B22B21` | red band, held                                                   |
-| Distant Amber | `#E2A008` | amber band, caution                                              |
-| Clear Lamp    | `#2E9E6B` | green band, clear                                                |
-
-Measured contrast, WCAG 2.1 relative luminance, computed rather than estimated:
-
-| Pair                          | Ratio   | Verdict      |
-| ----------------------------- | ------- | ------------ |
-| Enamel Bone on Frame Green    | 11.07:1 | AAA          |
-| Bone Muted on Frame Green     | 5.79:1  | AA           |
-| Brass on Frame Green          | 4.85:1  | AA           |
-| Enamel Bone on Night Block    | 14.08:1 | AAA          |
-| Points Black on Enamel Bone   | 14.47:1 | AAA          |
-| Lock Blue on Enamel Bone      | 5.80:1  | AA           |
-| Points Black on Distant Amber | 7.70:1  | AAA          |
-| Points Black on Clear Lamp    | 5.17:1  | AA           |
-| Enamel Bone on Stop Red       | 5.34:1  | AA           |
-| Stop Red on Frame Green       | 2.07:1  | **unusable** |
-| Lock Blue on Frame Green      | 1.91:1  | **unusable** |
-
-Two rules fall directly out of those numbers, and they are not stylistic:
-
-1. **A verdict colour is always a fill, never text on the green field.** Stop Red as lettering on
-   Frame Green is 2.07:1. So a verdict appears as a lamp disc, a lever body, or a filled tag, and
-   the lettering on that fill is Points Black on amber and clear, Enamel Bone on red.
-2. **Links on the green field are Brass, not Lock Blue.** Lock Blue on green is 1.91:1. Lock Blue
-   is a bone field colour only.
-
-**Nothing is carried by colour alone.** Every score prints a keyed 0 to 100 track underneath it,
-ticked at the two band thresholds, 30 and 61, so the band survives greyscale and colour vision
-deficiency. Every verdict tag also spells its word. (Kept from the rejected direction.)
+Scale, in px because this is an interface and not a document: 10.5 label, 12 mono meta, 13.5 dense
+body, 15 body, 16.5 lede, 19 total, 24 card title, clamp(29, 4vw, 46) headline. Tracking tightens
+as size grows: -0.035em on the headline, -0.025em on the wordmark, 0 on body, +0.1em on uppercase
+labels. Uppercase is for labels only and never for body text.
 
 ## 4. Structure
 
-### The skeleton
+**Home and Project.** A short headline states the run in words, because the first thing a person
+wants is the count. Then the one element nothing else in this category has: **the spread**, every
+pending bump in the run placed as a pin on a single 0 to 100 axis, with the two band thresholds
+marked at 30 and 61. The shape of the run is legible before a single row is read. Pins alternate
+between two lanes so labels never collide, and the axis scrolls sideways inside its own panel on
+narrow screens rather than being dropped, because it keeps its meaning at any width.
 
-Every page is the same instrument, seen from a different angle. There is no hero, no
-three-feature row, and no card grid anywhere in this product.
+Below it the queue is a plain dense list, one row per bump: dependency, the move in mono, one line
+of why, then the score as a numeral plus a track carrying the same two threshold ticks as the
+spread. The same measurement appears twice at two scales, which is what makes the system feel like
+one instrument rather than a page of widgets. No cards in the queue. No status pills.
 
-**The lever rail** runs down the left on desktop, 84px wide, painted Frame Green with a brass floor
-plate. One lever per watched repository, each a brass ball on a painted shaft with a cast brass
-number plate, plus one white spare lever that adds a repository. The shaft colour is the worst
-verdict currently open in that repository, so the rail is a status display and the navigation at
-once. Hovering or focusing throws the lever seven degrees. Below 900px the rail becomes a
-horizontal frame stuck to the bottom edge, scrolling sideways.
+**Bump detail.** Two surfaces. On the left the explanation, under a permanent label reading
+"Machine explanation, not verdict", where each claim is a code line followed by the quoted source
+that justifies it and a link to it. On the right the arithmetic: every factor, its points, a bar
+proportional to its contribution, spent factors greyed at zero rather than hidden, and a total ruled
+off in Ink. A reader can add the column up.
 
-**The block shelf** runs across the top, at least 92px, Frame Green with a brass underline. It
-carries the wordmark on the left and then the instruments for whatever page you are on: line state,
-last run, next run, rubric version. At the right end sit the three lamps, real discs with a warm
-bloom, each with its count and its word. This is what a normal site would spend on a hero.
+**Rubric.** The same factor table, published, versioned, read only. **Audit.** The same dense row
+rhythm as the queue, newest first. **About.** The architecture diagram, where the model branch
+visibly stops at the explanation and only the policy-controlled actor reaches GitHub.
 
-**Home** is the illuminated diagram. Watched repositories are drawn as track sections along one
-horizontal line, each with its name, its bump count, its run time and three aspect pips, followed
-by a dashed spare section. Under the line is a brass sleeper rail, and under that the Register: a
-ruled table of the most recent actions, with the rule id set in a brass chip.
+### Motion
 
-**Project** is the lever frame itself. The queue is not a table of rows, it is a frame of levers:
-one full width bar per bump, 12px of verdict colour down its left edge, a cast plate carrying its
-position number, the dependency in Archivo with a one line reason under it, the version move in
-Overpass Mono, the score with its keyed track, and the action taken as an enamel tag. Hovering
-slides the bar six pixels right, the way a lever moves before it locks. Above the frame, the
-filter is a real signal head: a black backboard with three lenses that light when their aspect is
-shown.
+Restrained and quick, because this is a tool. Rows and links change state in 120ms on
+`cubic-bezier(0.2, 0, 0, 1)`. The spread's pins and every score track animate from zero to their
+value once on first paint over 420ms, staggered by 18ms, because a measurement arriving is worth
+seeing once. Nothing else moves. Nothing animates because it scrolled into view. A run in progress
+advances only when a real stage event arrives, never on a timer.
 
-**Bump detail** is the locking table and the notice. The score sits on a Frame Green plate at the
-right with its band, its rule text and its rubric version, and the action log stacks under it and
-stays with you as you scroll. (Kept from the rejected direction.) The main column is the locking
-table: one row per factor, each with its evidence link and a Locks column stating what that factor
-forbids, closed by a double brass rule and the total. Below it, the generated brief is a notice
-pinned to the board, a bone rectangle with two brass fixing dots, set in Newsreader, carrying the
-permanent label **Machine explanation, not verdict**. (Kept from the rejected direction.) Upstream
-quotes are italic behind a brass bar, and every claim about this repository is a code line with its
-file and line number behind a red bar.
-
-**Audit** is the train register, ruled in brass on bone, newest first. **Policy** is the rule book:
-the factor table, then the three bands as three lever bars, then the standing rule that bumpwarden
-never merges. **About** is the track schematic, which is the same SVG that ships in `docs/` for the
-submission. The model sits on a spur off the main line and the spur ends in a red buffer stop,
-because the agent holds no GitHub tool and cannot reach the actor. (Kept from the rejected
-direction.)
-
-### The motion grammar
-
-Mechanical, weighted, short. Nothing elastic, nothing that eases in and out like a fade.
-
-| Movement    | Duration | Curve                              | What moves                                              |
-| ----------- | -------- | ---------------------------------- | ------------------------------------------------------- |
-| Lever throw | 160ms    | `cubic-bezier(0.34, 0.9, 0.28, 1)` | levers rotate, queue bars slide, buttons lift           |
-| Lamp strike | 220ms    | `cubic-bezier(0.4, 0, 0.2, 1)`     | a lamp's bloom rises like a filament, never cross fades |
-| Board step  | instant  | none                               | the run advances one section per completed repository   |
-
-The running board steps discretely. It advances only when a real stage event arrives, never on a
-timer and never as a smooth interpolation, so the shelf cannot report progress the run has not
-made. (Kept from the rejected direction.) There are no page transitions: navigation is instant,
-like throwing a lever. Nothing animates merely because it entered the viewport. There is no
-parallax anywhere in this product.
-
-Under `prefers-reduced-motion: reduce`, every transition collapses to 1ms, levers change state
-without rotating, bars do not slide, and lamps change colour with no bloom animation. The running
-state is then carried by the words RUNNING, the current stage and the elapsed time.
+Under `prefers-reduced-motion: reduce` every duration collapses to 1ms, pins and tracks paint at
+their final value, and run state is carried by the words plus the elapsed time.
 
 ## 5. Real media
 
-The evidence is the image. There are no photographs, no illustrated people, no abstract shapes and
-no decorative gradients anywhere in this product.
+There is no photography, no illustration of people and no abstract decoration, but for a reason
+that is now the opposite of the retired direction's: the data is genuinely the most interesting
+thing on the screen, so it gets the space.
 
-1. **Real data, at full size.** The locking table, the score numerals, the version moves, the
-   register. All of it read from the live store, never sample rows.
-2. **Real product surfaces.** Cropped screenshots of the actual issue and pull request bumpwarden
-   opened on `voyagi/bumpwarden-demo-app`, shown on Home and About as what it produced.
-3. **Real upstream text.** Verbatim release note excerpts and commit subjects, typeset as notices,
-   each with a link to its source. When a note cannot be read, the page says so and scores it as
-   missing. It is never paraphrased into something that looks retrieved.
-4. **Drawn for this product, flat vector, two colours.** The signal aspect plates, the lever and its
-   cast number plate, the brass fixing dots, the sleeper rail, and the track schematic on About
-   which doubles as the submission's architecture diagram.
+1. **The spread and the score tracks**, drawn from live values. These are the product's images.
+2. **The factor waterfall**, the arithmetic shown as proportional bars.
+3. **Real upstream text**, verbatim release note excerpts quoted next to the claim they support,
+   each with a link to its source, and marked as unreadable when it could not be fetched.
+4. **Real product surfaces**, cropped screenshots of the actual issue and pull request bumpwarden
+   opened on the demo repository.
+5. **One drawn diagram**, the architecture schematic on About, which is also the submission's
+   architecture image.
 
-## Why this is not the default
+## Why this is not the default, and not the house style
 
-Handed this brief, the obvious answer is a dark control room: near black, monospace throughout, one
-acid green accent, a grid of rounded metric cards and a status pill per row. That is exactly what
-[oxide.computer](https://oxide.computer) already ships in its stylesheet, `#080f11` with a single
-`#00d497`, and it is what the rejected direction drifted toward in a lighter key. It reads as
-machine made because every operations product has converged on it.
+The default answer for a dependency tool is a table of rows with a coloured status pill per row.
+Every competitor ships it. This replaces the pill with a position on a published scale, at two
+different scales on the same screen, and spends its only colour on that.
 
-This one puts a painted deep green and warm enamel bone at the centre, with brass and lever red, and
-uses a transport grotesque rather than a monospace as its main voice. More to the point, the
-skeleton has no dashboard equivalent: a lever frame whose positions and colours already mean what
-the product means, a locking table that states what each factor forbids, and a printed notice for
-the part a machine wrote. Swap the palette out and it is still not a template, because the objects
-themselves are the argument.
-
-## Reference DNA
-
-Every choice traces to one of these, and each mechanic below was read out of the site's own
-stylesheet on 2026-08-21 rather than remembered.
-
-- **[The Pudding](https://pudding.cool)**. Atlas Grotesk, Tiempos Text, Gooper SemiCondensed, Atlas
-  Typewriter. Saturated poster colours as whole field backgrounds. A short px type ladder,
-  14/16/20/28/48. Radii 2 to 6px. Not one `cubic-bezier` in the whole stylesheet.
-  **Taken:** colour is the structure and type is the hierarchy. Motion is not the differentiator.
-- **[Oxide Computer](https://oxide.computer)**. Suisse Intl and GT America Mono, near black with one
-  acid green, a scale of many small steps, hairline rules, drawn technical diagrams.
-  **Taken:** engineering credibility comes from real technical drawing and tabular data.
-  **Rejected:** its palette, which is the default this direction exists to avoid.
-- **[37signals](https://37signals.com)**. One face, Lab Grotesque, weights 300 to 800. Fluid
-  headline type, `calc(1em + 1vw)`. Em based radii. No card grid at all.
-  **Taken:** the absence of cards is what stops a page reading as a template.
-- **[Met Office UK weather warnings](https://www.metoffice.gov.uk/weather/warnings-and-advice/uk-warnings)**.
-  FS Emeric and Open Sans, warning yellow `#ffe923`, driven by a published impact by likelihood
-  matrix. **Taken:** when the verdict is the product, the colour band must be a published, keyed
-  system a reader can check, never decoration. This is why the Policy page exists as a page rather
-  than a paragraph in the README.
+The harder check, which the retired direction failed: **would this have suited the previous two
+products?** No. The spread only means something when many items share one scored scale, which is
+true here and is not true of an investigation timeline or a call queue. The colour law only works
+when a product has exactly one thing worth colouring. That is what makes this derived rather than
+borrowed.
 
 ## Banned in this product
 
-Generic hero with a gradient and centred text. Purple or blue SaaS gradients. Glassmorphism. Emoji
-as icons. Stock photography. Card grids. Gradient text. The big number with a gradient. Nested
-cards. Bounce easing. Cream with a high contrast serif and a terracotta accent. Near black with a
-single acid accent. Hairline rules with zero radius and dense columns. Gradient orbs. Warm paper
-with monospace and nothing else, which is the code editor look. Warm off white with one saturated
-accent and one display face. Placeholder copy of any kind, dummy Latin included.
+Status pills. Card grids. A brand accent colour competing with risk colour. Gradients as
+decoration, the ramp is the only gradient and it encodes a scale. Glassmorphism. Emoji as icons.
+Stock photography. Gradient text. Nested cards. Bounce easing. Anything animating on scroll.
+Placeholder copy of any kind, dummy Latin included. And the whole retired recipe: a mid-century
+operations setting, a dark ground with a warm cream reading surface, and an interface pretending to
+be a physical panel.
 
 No em dashes or en dashes in any copy this product ships.
