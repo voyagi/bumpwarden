@@ -51,6 +51,9 @@ export function Schematic(props: SchematicProps = {}): JSX.Element {
         : {})}
     >
       {props.standalone ? <style>{STANDALONE_STYLE}</style> : null}
+      {/* The page behind this one is the app's own background; a file on its own has none, and a
+          reader in a dark viewer would get dark strokes on dark nothing. */}
+      {props.standalone ? <rect x="0" y="0" width="1000" height="400" fill="#fafaf9" /> : null}
       <rect class="box" x="272" y="18" width="150" height="48" />
       <text class="cap" x="286" y="40">
         GitHub REST
