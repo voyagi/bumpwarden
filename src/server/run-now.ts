@@ -22,8 +22,17 @@ export interface RunNowStatus {
   retryAfterSeconds: number;
 }
 
+/**
+ * A timestamp that does not parse leaves the arithmetic as NaN, and every comparison against NaN
+ * is false, so the wait would read as zero and the cooldown would simply not exist. The whole
+ * cooldown is charged instead: a stored run record this service cannot read is a reason to hold
+ * the button, not to open it.
+ */
 function secondsUntil(finishedAt: string, now: Date): number {
-  const ready = new Date(finishedAt).getTime() + RUN_NOW_COOLDOWN_MS;
+  const finished = Date.parse(finishedAt);
+  if (!Number.isFinite(finished)) return RUN_NOW_COOLDOWN_MS / 1000;
+
+  const ready = finished + RUN_NOW_COOLDOWN_MS;
   return Math.max(0, Math.ceil((ready - now.getTime()) / 1000));
 }
 

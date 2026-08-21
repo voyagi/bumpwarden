@@ -16,7 +16,7 @@ import type { Band } from '../core/types.js';
 import { log } from '../io/log.js';
 import type { BumpwardenStore } from '../io/store.js';
 import { RUN_LOOKBACK, REFUSAL_STATUS, runNowStatus } from './run-now.js';
-import type { StartRun } from './start-run.js';
+import { isRunInProgress, type StartRun } from './start-run.js';
 import { auditFeed, utcDate, utcStamp, utcTime } from './view-model.js';
 import { AboutPage } from './views/about.js';
 import { AuditPage } from './views/audit.js';
@@ -47,12 +47,22 @@ function parseBand(value: string | undefined): Band | null {
   return BANDS.find((band) => band === value) ?? null;
 }
 
+/** The only two schemes this service is ever reached over. Anything else is a forged header. */
+const FORWARDED_SCHEMES = new Set(['http', 'https']);
+
+/**
+ * The public origin. `SERVICE_BASE_URL` wins whenever it is set, and the deploy sets it, because
+ * everything below it is caller-controlled: the request url is built from the Host header, and
+ * `x-forwarded-proto` is whatever the last hop wrote. A canonical link, a sitemap entry and the
+ * Sitemap line in robots.txt all carry this value, so an unconfigured instance answering a forged
+ * Host would publish someone else's address as its own.
+ */
 function origin(c: Context, configured: string | null | undefined): string {
   if (configured) return configured.replace(/\/+$/, '');
 
   const url = new URL(c.req.url);
-  const forwarded = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim();
-  if (forwarded) url.protocol = `${forwarded}:`;
+  const forwarded = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  if (forwarded && FORWARDED_SCHEMES.has(forwarded)) url.protocol = `${forwarded}:`;
   return url.origin;
 }
 
@@ -330,7 +340,15 @@ function mountRunNow(app: Hono, options: DashboardOptions): void {
 
     // Awaited rather than started and forgotten: Cloud Run stops giving a container CPU once the
     // response is sent, so a run left in flight behind the response would freeze mid-request.
-    const run = await options.startRun({ trigger: 'manual', repositoryId: id });
+    let run;
+    try {
+      run = await options.startRun({ trigger: 'manual', repositoryId: id });
+    } catch (error) {
+      if (!isRunInProgress(error)) throw error;
+      // The status above read ready, so this is a second press that arrived while the first was
+      // still between its own read and its claim. The lease is what settled it.
+      return c.json({ ...status, state: 'running', message: 'A run is already going.' }, 409);
+    }
 
     if (c.req.header('accept')?.includes('application/json')) {
       return c.json({ runId: run.id, status: run.status, counts: run.counts });

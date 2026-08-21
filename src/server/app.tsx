@@ -1,10 +1,11 @@
 import { Hono, type Context, type Next } from 'hono';
+import { secureHeaders } from 'hono/secure-headers';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { MemoryStore } from '../io/memory-store.js';
 import type { BumpwardenStore } from '../io/store.js';
 import { mountDashboard } from './dashboard.js';
 import { authorizeRun, type RunAuthConfig } from './oidc.js';
-import type { StartRun } from './start-run.js';
+import { isRunInProgress, type StartRun } from './start-run.js';
 
 export const SERVICE_NAME = 'bumpwarden';
 
@@ -62,10 +63,45 @@ function mountAssets(app: Hono): void {
   );
 }
 
+/**
+ * Nothing on any page loads from anywhere but this service: both typefaces are self-hosted, the
+ * only script is `/run-now.js`, and the architecture diagram is inline SVG. So the policy can be
+ * default-deny rather than a list of allowances, and `script-src 'self'` with no inline escape
+ * means a string that reached a page as markup still cannot run.
+ *
+ * `style-src` is the one exception: the score marks carry their width and colour as style
+ * attributes, since a bar whose length is the reading cannot come from a static sheet.
+ */
+const CONTENT_SECURITY_POLICY = {
+  defaultSrc: ["'none'"],
+  scriptSrc: ["'self'"],
+  styleSrc: ["'self'", "'unsafe-inline'"],
+  imgSrc: ["'self'"],
+  fontSrc: ["'self'"],
+  connectSrc: ["'self'"],
+  formAction: ["'self'"],
+  baseUri: ["'none'"],
+  frameAncestors: ["'none'"],
+};
+
 export function createApp(options: AppOptions = {}): Hono {
   const instance = new Hono();
   const runAuth = options.runAuth ?? shutRunAuth();
   const startRun = options.startRun ?? null;
+
+  instance.use(
+    '*',
+    secureHeaders({
+      contentSecurityPolicy: CONTENT_SECURITY_POLICY,
+      // A public read-only dashboard has no cross-origin isolation to buy, and both of these break
+      // an ordinary browser tab reading it rather than protecting anyone.
+      crossOriginEmbedderPolicy: false,
+      crossOriginOpenerPolicy: false,
+      referrerPolicy: 'strict-origin-when-cross-origin',
+      strictTransportSecurity: 'max-age=31536000; includeSubDomains',
+      xFrameOptions: 'DENY',
+    }),
+  );
 
   instance.get('/healthz', (c) => c.json({ ok: true, service: SERVICE_NAME }));
 
@@ -80,7 +116,15 @@ export function createApp(options: AppOptions = {}): Hono {
 
     // The run is awaited rather than started and forgotten: Cloud Run stops giving a container CPU
     // once the response is sent, so anything left running after it would be frozen mid-request.
-    const run = await startRun({ trigger: 'scheduled' });
+    let run;
+    try {
+      run = await startRun({ trigger: 'scheduled' });
+    } catch (error) {
+      if (!isRunInProgress(error)) throw error;
+      // Cloud Scheduler retries a 5xx and would pile more runs behind the one already going.
+      return c.json({ ok: false, error: 'a run is already going' }, 409);
+    }
+
     return c.json({
       ok: true,
       caller: decision.caller,

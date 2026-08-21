@@ -56,7 +56,9 @@ export async function authorizeRun(
   }
 
   if (!claims) return { ok: false, status: 401, reason: 'token did not verify' };
-  if (claims.email_verified === false) {
+  // Not `=== false`: a token with no email_verified claim at all is one Google did not say was
+  // verified, and this endpoint opens issues on someone's repository.
+  if (claims.email_verified !== true) {
     return { ok: false, status: 403, reason: 'token email is not verified' };
   }
   if (!claims.email || claims.email !== config.invokerEmail) {

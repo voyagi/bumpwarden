@@ -87,5 +87,8 @@ serve({ fetch: app.fetch, hostname: bindHostname(env.HOST), port: env.PORT }, (i
     brief: env.GEMINI_API_KEY ? 'gemini' : 'disabled',
     github: env.GITHUB_TOKEN ? 'authenticated' : 'read-only',
     runEndpoint: env.RUN_INVOKER_EMAIL && env.SERVICE_BASE_URL ? 'gated' : 'closed',
+    // Without a configured base url the canonical link, the sitemap and robots.txt follow the
+    // Host header of whoever asked, which is a stranger on a public deployment.
+    canonical: env.SERVICE_BASE_URL ? 'configured' : 'follows the request host',
   });
 });
