@@ -1,0 +1,186 @@
+import { describe, expect, it, vi } from 'vitest';
+import { MANIFEST_JSON } from '../testkit/fixtures.js';
+import { fakeGitHub } from '../testkit/fake-github.js';
+import { ROUTES, RepositoryActor } from './github-actor.js';
+
+const TARGET = { owner: 'demo', repo: 'app' };
+
+function actorOver(github = fakeGitHub()) {
+  return {
+    github,
+    actor: new RepositoryActor(github.request, TARGET, {
+      minWriteIntervalMs: 0,
+      sleep: async () => undefined,
+    }),
+  };
+}
+
+describe('the route table', () => {
+  const routes = Object.values(ROUTES);
+
+  it('has no way to merge anything', () => {
+    expect(routes.filter((route) => /merge/i.test(route))).toEqual([]);
+  });
+
+  it('names owner and repo in every route, so no call can leave the target repository', () => {
+    expect(routes.filter((route) => !route.includes('/repos/{owner}/{repo}'))).toEqual([]);
+  });
+
+  it('lists each route once', () => {
+    expect(new Set(routes).size).toBe(routes.length);
+  });
+
+  it('uses a read verb for every route that is not a write', () => {
+    expect(routes.filter((route) => route.startsWith('DELETE'))).toEqual([]);
+  });
+});
+
+describe('every call the actor makes', () => {
+  it('carries the owner and repository it was constructed with', async () => {
+    const github = fakeGitHub({
+      issues: [{ number: 10, labels: ['bumpwarden'] }],
+      comments: [{ id: 800, issueNumber: 10 }],
+      files: { 'package.json': MANIFEST_JSON },
+    });
+    const { actor } = actorOver(github);
+
+    await actor.facts();
+    await actor.listBumpwardenIssues('bumpwarden');
+    await actor.listOpenPullRequests();
+    await actor.listComments(10);
+    await actor.createIssue({ title: 't', body: 'b', labels: ['bumpwarden'] });
+    await actor.updateIssue(10, { title: 't', body: 'b', labels: ['bumpwarden'] });
+    await actor.addLabels(10, ['bumpwarden:red']);
+    await actor.createComment(10, 'hello');
+    await actor.updateComment(800, 'hello again');
+    const sha = await actor.headSha('main');
+    await actor.ensureBranch('bumpwarden/express-5.0.0', sha);
+    const file = await actor.readFile('package.json', 'bumpwarden/express-5.0.0');
+    await actor.writeFile({
+      path: 'package.json',
+      text: file.text,
+      sha: file.sha,
+      branch: 'bumpwarden/express-5.0.0',
+      message: 'bump',
+    });
+    await actor.createPullRequest({ title: 't', body: 'b', head: 'x', base: 'main' });
+
+    expect(github.calls.length).toBeGreaterThan(10);
+    const foreign = github.calls.filter(
+      (call) => call.params.owner !== 'demo' || call.params.repo !== 'app',
+    );
+    expect(foreign).toEqual([]);
+  });
+});
+
+describe('repository facts', () => {
+  it('reports write access when the token can push', async () => {
+    const { actor } = actorOver(fakeGitHub({ canPush: true, defaultBranch: 'trunk' }));
+    expect(await actor.facts()).toEqual({ defaultBranch: 'trunk', canWrite: true });
+  });
+
+  it('reports no write access for a read-only token', async () => {
+    const { actor } = actorOver(fakeGitHub({ canPush: false }));
+    expect((await actor.facts()).canWrite).toBe(false);
+  });
+
+  it('throws a readable error when GitHub refuses the read', async () => {
+    const { actor } = actorOver(fakeGitHub({ failures: { [ROUTES.repository]: 404 } }));
+    await expect(actor.facts()).rejects.toThrow('reading the repository failed with 404');
+  });
+});
+
+describe('labels', () => {
+  it('creates a label once per actor, however many issues use it', async () => {
+    const { actor, github } = actorOver();
+    await actor.createIssue({ title: 'a', body: 'a', labels: ['bumpwarden'] });
+    await actor.createIssue({ title: 'b', body: 'b', labels: ['bumpwarden'] });
+
+    const created = github.calls.filter((call) => call.route === ROUTES.createLabel);
+    expect(created).toHaveLength(1);
+  });
+
+  it('treats a label that already exists as ordinary, not as a failure', async () => {
+    const { actor } = actorOver();
+    await actor.ensureLabels(['bumpwarden']);
+    await expect(actor.ensureLabels(['bumpwarden'])).resolves.toBeUndefined();
+  });
+});
+
+describe('branches and files', () => {
+  it('reports that a branch was already there instead of failing the run', async () => {
+    const { actor } = actorOver(fakeGitHub({ files: { 'package.json': MANIFEST_JSON } }));
+    const sha = await actor.headSha('main');
+
+    expect(await actor.ensureBranch('bumpwarden/express-5.0.0', sha)).toBe(true);
+    expect(await actor.ensureBranch('bumpwarden/express-5.0.0', sha)).toBe(false);
+  });
+
+  it('reads a file as text and writes it back as text', async () => {
+    const github = fakeGitHub({ files: { 'package.json': MANIFEST_JSON } });
+    const { actor } = actorOver(github);
+
+    const file = await actor.readFile('package.json', 'main');
+    expect(file.text).toBe(MANIFEST_JSON);
+
+    await actor.writeFile({
+      path: 'package.json',
+      text: '{"name":"changed"}',
+      sha: file.sha,
+      branch: 'main',
+      message: 'bump',
+    });
+    expect(github.fileOn('main', 'package.json')).toBe('{"name":"changed"}');
+  });
+
+  it('refuses a file that is not base64, rather than writing something corrupt back', async () => {
+    const { actor } = actorOver(fakeGitHub({ failures: { [ROUTES.readFile]: 200 } }));
+    await expect(actor.readFile('package.json', 'main')).rejects.toThrow('not base64');
+  });
+});
+
+describe('write pacing', () => {
+  it('waits between writes, because GitHub answers a burst with a secondary rate limit', async () => {
+    const sleep = vi.fn(async () => undefined);
+    let clock = 0;
+    const github = fakeGitHub();
+    const actor = new RepositoryActor(github.request, TARGET, {
+      minWriteIntervalMs: 1000,
+      sleep,
+      now: () => clock,
+    });
+
+    await actor.ensureLabels(['one']);
+    clock = 200;
+    await actor.ensureLabels(['two']);
+
+    expect(sleep).toHaveBeenCalledWith(800);
+  });
+
+  it('does not wait before the first write of a run', async () => {
+    const sleep = vi.fn(async () => undefined);
+    const github = fakeGitHub();
+    const actor = new RepositoryActor(github.request, TARGET, {
+      minWriteIntervalMs: 1000,
+      sleep,
+      now: () => 5000,
+    });
+
+    await actor.ensureLabels(['one']);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('does not pace reads, which have their own generous limit', async () => {
+    const sleep = vi.fn(async () => undefined);
+    const github = fakeGitHub();
+    const actor = new RepositoryActor(github.request, TARGET, {
+      minWriteIntervalMs: 1000,
+      sleep,
+      now: () => 0,
+    });
+
+    await actor.listOpenPullRequests();
+    await actor.listOpenPullRequests();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+});

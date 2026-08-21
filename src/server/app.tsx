@@ -1,10 +1,19 @@
 import { Hono } from 'hono';
+import type { RunRecord, Trigger } from '../core/records.js';
 import { authorizeRun, type RunAuthConfig } from './oidc.js';
 
 export const SERVICE_NAME = 'bumpwarden';
 
+export interface StartRunOptions {
+  trigger: Trigger;
+  repositoryId?: string;
+}
+
+export type StartRun = (options: StartRunOptions) => Promise<RunRecord>;
+
 export interface AppOptions {
   runAuth?: RunAuthConfig;
+  startRun?: StartRun | null;
 }
 
 /**
@@ -27,7 +36,22 @@ export function createApp(options: AppOptions = {}): Hono {
     if (!decision.ok) {
       return c.json({ ok: false, error: decision.reason }, decision.status);
     }
-    return c.json({ ok: true, accepted: true, caller: decision.caller });
+    if (!options.startRun) {
+      return c.json({ ok: false, error: 'the run pipeline is not configured' }, 503);
+    }
+
+    // The run is awaited rather than started and forgotten: Cloud Run stops giving a container CPU
+    // once the response is sent, so anything left running after it would be frozen mid-request.
+    const run = await options.startRun({ trigger: 'scheduled' });
+    return c.json({
+      ok: true,
+      caller: decision.caller,
+      runId: run.id,
+      status: run.status,
+      counts: run.counts,
+      actionsTaken: run.actionsTaken,
+      repositories: run.repositories.length,
+    });
   });
 
   instance.get('/', (c) =>

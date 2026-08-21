@@ -1,8 +1,34 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { RunRecord } from '../core/records.js';
 import { authorizeRun, type IdTokenClaims, type RunAuthConfig } from './oidc.js';
 import { createApp } from './app.js';
 
 const INVOKER = 'bumpwarden-runner@demo.iam.gserviceaccount.com';
+
+function runRecord(): RunRecord {
+  return {
+    id: 'run-20260821T060000000Z-scheduled',
+    trigger: 'scheduled',
+    status: 'finished',
+    startedAt: '2026-08-21T06:00:00.000Z',
+    finishedAt: '2026-08-21T06:01:00.000Z',
+    repositories: [
+      {
+        repositoryId: 'demo/app',
+        dependenciesConsidered: 1,
+        counts: { green: 1, amber: 0, red: 0 },
+        actions: 1,
+        missing: [],
+        error: null,
+      },
+    ],
+    counts: { green: 1, amber: 0, red: 0 },
+    actionsTaken: 1,
+    rubricVersion: '1.0.0',
+    policyVersion: '1.0.0',
+    error: null,
+  };
+}
 
 function config(
   overrides: Partial<RunAuthConfig> = {},
@@ -109,14 +135,45 @@ describe('the run route', () => {
     expect(res.status).toBe(401);
   });
 
-  it('accepts the scheduler token', async () => {
+  it('starts a run for the scheduler token and answers with the run it produced', async () => {
+    const startRun = vi.fn(async () => runRecord());
+    const app = createApp({ runAuth: config({}, VALID), startRun });
+
+    const res = await app.request('/run', {
+      method: 'POST',
+      headers: { authorization: 'Bearer token' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      caller: INVOKER,
+      runId: runRecord().id,
+      status: 'finished',
+      counts: { green: 1, amber: 0, red: 0 },
+      actionsTaken: 1,
+      repositories: 1,
+    });
+    expect(startRun).toHaveBeenCalledWith({ trigger: 'scheduled' });
+  });
+
+  it('answers 503 when the caller is allowed in but no run pipeline is wired', async () => {
     const app = createApp({ runAuth: config({}, VALID) });
     const res = await app.request('/run', {
       method: 'POST',
       headers: { authorization: 'Bearer token' },
     });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, caller: INVOKER });
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ ok: false });
+  });
+
+  it('does not start a run for a caller it rejected', async () => {
+    const startRun = vi.fn(async () => runRecord());
+    const app = createApp({ runAuth: config({}, VALID), startRun });
+
+    await app.request('/run', { method: 'POST' });
+    expect(startRun).not.toHaveBeenCalled();
   });
 
   it('does not answer a GET on the run endpoint', async () => {

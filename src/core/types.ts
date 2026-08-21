@@ -19,6 +19,11 @@ export interface ReleaseEvidence {
   notes: string | null;
   notesSource: string | null;
   commitSubjects: string[];
+  /**
+   * File paths the upstream diff touched. Optional because it exists only when the tag compare
+   * succeeded, and no factor scores it: it is material for the brief, not evidence for the score.
+   */
+  changedFiles?: string[];
 }
 
 export interface CandidateBump {
@@ -35,6 +40,12 @@ export interface CandidateBump {
   usage: UsageMatch;
   usageSites: UsageSite[];
   release: ReleaseEvidence;
+}
+
+/** A source the run could not read. Recorded rather than guessed, and shown next to the verdict. */
+export interface MissingSource {
+  what: string;
+  why: string;
 }
 
 export interface ScoredFactor {

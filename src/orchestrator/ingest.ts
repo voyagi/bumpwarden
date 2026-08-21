@@ -1,4 +1,9 @@
-import type { AdvisorySeverity, CandidateBump, ReleaseEvidence } from '../core/types.js';
+import type {
+  AdvisorySeverity,
+  CandidateBump,
+  MissingSource,
+  ReleaseEvidence,
+} from '../core/types.js';
 import { classifyUsage, type SourceFile } from '../core/usage.js';
 import { fetchAdvisory, fetchVersionFacts } from '../io/depsdev.js';
 import { compareTags, fetchReleaseNotes, fetchTextFile, type RepoRef } from '../io/github.js';
@@ -18,10 +23,7 @@ import {
   type LockfileKind,
 } from './manifest.js';
 
-export interface MissingSource {
-  what: string;
-  why: string;
-}
+export type { MissingSource } from '../core/types.js';
 
 export interface IngestOptions {
   githubToken?: string | null;
@@ -114,6 +116,7 @@ async function collectReleaseEvidence(
     notes: notes.ok ? notes.value.body : null,
     notesSource: notes.ok ? notes.value.source : null,
     commitSubjects: compared.ok ? compared.value.commitSubjects : [],
+    changedFiles: compared.ok ? compared.value.changedFiles : [],
   };
 }
 
