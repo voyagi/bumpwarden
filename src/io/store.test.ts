@@ -8,7 +8,8 @@ import { MemoryStore } from './memory-store.js';
 import type { BumpwardenStore } from './store.js';
 
 const EMULATOR = process.env.FIRESTORE_EMULATOR_HOST;
-const EMULATOR_PROJECT = 'bumpwarden-emulator';
+/** The `demo-` prefix is Firebase's marker for a project with no live resources behind it. */
+const EMULATOR_PROJECT = 'demo-bumpwarden';
 
 function runRecord(overrides: Partial<RunRecord> = {}): RunRecord {
   return {
