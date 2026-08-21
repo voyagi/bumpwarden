@@ -8,7 +8,13 @@ import {
   registryUrl,
   resolveCandidate,
 } from './npm.js';
-import { compareTags, fetchReleaseNotes, fetchTextFile, tagCandidates } from './github.js';
+import {
+  compareTags,
+  compareVersions,
+  fetchReleaseNotes,
+  fetchTextFile,
+  tagCandidates,
+} from './github.js';
 import { json, routedFetch, status, urlContains } from '../testkit/scripted-fetch.js';
 
 const noSleep = () => Promise.resolve();
@@ -182,6 +188,16 @@ describe('deps.dev client', () => {
   });
 });
 
+/** The exact tag ranges a set of request urls asked GitHub to compare. */
+function comparesIn(urls: string[]): Set<string> {
+  const marker = '/compare/';
+  return new Set(
+    urls
+      .filter((url) => url.includes(marker))
+      .map((url) => url.slice(url.indexOf(marker) + marker.length)),
+  );
+}
+
 describe('github client', () => {
   it('tries both tag spellings before recording a miss', async () => {
     const { fetcher, urls } = fetcherFor([]);
@@ -264,5 +280,52 @@ describe('github client', () => {
     const { fetcher } = fetcherFor([{ match: urlContains('/compare/'), step: status(500) }]);
 
     expect(await compareTags(fetcher, TARGET, 'a', 'b')).toMatchObject({ ok: false });
+  });
+
+  /**
+   * express, body-parser and prisma all tag without the `v`, and a live run lost the commit
+   * subjects for five bumps out of eight before the compare tried the second spelling.
+   */
+  it('compares on the unprefixed tags when the prefixed pair is missing', async () => {
+    const { fetcher, urls } = fetcherFor([
+      {
+        match: urlContains('/compare/4.18.2...5.2.1'),
+        step: json({ total_commits: 1, commits: [{ commit: { message: 'fix: a thing' } }] }),
+      },
+    ]);
+
+    const result = await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1');
+
+    expect(urls.some((u) => u.includes('/compare/v4.18.2...v5.2.1'))).toBe(true);
+    expect(result.ok && result.value.commitSubjects).toEqual(['fix: a thing']);
+  });
+
+  it('never mixes the two spellings across one compare', async () => {
+    const { fetcher, urls } = fetcherFor([]);
+
+    await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1');
+
+    // Compared as a set of exact ranges: "v4.18.2...v5.2.1" contains the substring
+    // "4.18.2...v5.2.1", so a contains check here would pass on a mixed pair it should catch.
+    expect(comparesIn(urls)).toEqual(new Set(['v4.18.2...v5.2.1', '4.18.2...5.2.1']));
+  });
+
+  it('records a miss once, naming both spellings, rather than one per attempt', async () => {
+    const { fetcher } = fetcherFor([]);
+
+    expect(await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1')).toMatchObject({
+      ok: false,
+      reason: 'not-found',
+      detail: 'no compare between 4.18.2 and 5.2.1 under either tag spelling',
+    });
+  });
+
+  it('stops at the first spelling when GitHub itself is failing', async () => {
+    const { fetcher, urls } = fetcherFor([{ match: urlContains('/compare/'), step: status(500) }]);
+
+    expect(await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1')).toMatchObject({ ok: false });
+    // Retries of the same range collapse into one entry, so this asserts the second spelling was
+    // never reached rather than counting requests.
+    expect(comparesIn(urls)).toEqual(new Set(['v4.18.2...v5.2.1']));
   });
 });

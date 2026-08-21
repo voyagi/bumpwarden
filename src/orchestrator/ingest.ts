@@ -6,7 +6,7 @@ import type {
 } from '../core/types.js';
 import { classifyUsage, type SourceFile } from '../core/usage.js';
 import { fetchAdvisory, fetchVersionFacts } from '../io/depsdev.js';
-import { compareTags, fetchReleaseNotes, fetchTextFile, type RepoRef } from '../io/github.js';
+import { compareVersions, fetchReleaseNotes, fetchTextFile, type RepoRef } from '../io/github.js';
 import type { RunFetcher } from '../io/http.js';
 import {
   fetchPackument,
@@ -94,13 +94,7 @@ async function collectReleaseEvidence(
 
   const target: RepoRef = { ...upstream, ref: 'HEAD' };
   const notes = await fetchReleaseNotes(fetcher, target, candidateVersion, token);
-  const compared = await compareTags(
-    fetcher,
-    target,
-    `v${currentVersion}`,
-    `v${candidateVersion}`,
-    token,
-  );
+  const compared = await compareVersions(fetcher, target, currentVersion, candidateVersion, token);
 
   if (!notes.ok) {
     missing.push({ what: `${dependency} release notes`, why: `${notes.reason}: ${notes.detail}` });

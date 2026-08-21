@@ -152,6 +152,42 @@ export async function fetchTree(
   };
 }
 
+/**
+ * Compare two released versions, trying the same two tag spellings the release notes do. Without
+ * this a project that tags `4.18.2` rather than `v4.18.2` loses every commit subject, which is the
+ * evidence the breaking-marker factor and the brief are built from: a live run over eight real
+ * bumps lost five of them to the missing spelling.
+ *
+ * The prefix is applied to both sides together. A repository tags one way or the other, never one
+ * of each, so the mixed pairs would be two extra requests that can never match.
+ */
+export async function compareVersions(
+  fetcher: RunFetcher,
+  target: RepoRef,
+  current: string,
+  candidate: string,
+  token: string | null = null,
+): Promise<Outcome<CompareFacts>> {
+  for (const prefix of ['v', '']) {
+    const result = await compareTags(
+      fetcher,
+      target,
+      `${prefix}${current}`,
+      `${prefix}${candidate}`,
+      token,
+    );
+    if (result.ok) return result;
+    if (result.reason !== 'not-found') return result;
+  }
+
+  return {
+    ok: false,
+    reason: 'not-found',
+    status: 404,
+    detail: `no compare between ${current} and ${candidate} under either tag spelling`,
+  };
+}
+
 export async function compareTags(
   fetcher: RunFetcher,
   target: RepoRef,
