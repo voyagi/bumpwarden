@@ -29,6 +29,18 @@ the deploy steps in [../README.md](../README.md); if those change, this changes 
   marked as the demo, one run per project per five minutes, answering 409 while a run is going. The
   cooldown is keyed on the project rather than on the visitor: this instance has no accounts, and an
   IP address is personal data it has no reason to hold.
+- **One run exists at a time, and a lease says so, not a status read.** Before a run reads or
+  writes anything it takes a lease in Firestore inside a transaction, so presses that arrive
+  together, or on different instances of the service, do not each start a run of their own. The
+  lease expires, so a container killed mid-run does not leave the button dead.
+
+## What a browser is allowed to do with a page
+
+The dashboard publishes text other people wrote: release notes, GitHub issue titles, and the
+agent's reading of both. Every response carries a content security policy that is default-deny, so
+that text has nothing to reach for even if it ever arrived as markup. The only script is this
+service's own file, both typefaces and the diagram come from the container, no page may be framed,
+and no url that is not http, https or one of this service's own paths is ever rendered as a link.
 
 ## Identities and secrets
 
@@ -69,5 +81,16 @@ by Google to improve its products, and what is sent is public release notes and 
   write tool, and every claim it returns is checked against the material it was given before it is
   shown. Prompt text in a changelog can waste a call. It cannot reach GitHub.
 - **A public run trigger costs money in principle.** In practice it is one repository, rate-limited,
-  bounded by a call budget per run and by the brief and action budgets, and the whole thing sits
-  inside free tiers.
+  bounded by a call budget per run and by the brief and action budgets, held to one run at a time
+  by the lease above, and the whole thing sits inside free tiers.
+- **Every outbound read belongs to somebody else.** Each carries its own twenty second deadline and
+  a size cap, and a source that hangs, resets or floods becomes a recorded missing source rather
+  than a run that never returns. Proven against a real server on a real port, not a mock.
+- **The image carries five SQL drivers it never opens.** `@google/adk` declares
+  `@mikro-orm/mariadb`, `mssql`, `mysql`, `postgresql` and `sqlite` as peer dependencies without
+  marking them optional, so npm installs all five; bumpwarden keeps its state in Firestore and
+  loads none of them. One of them, `mariadb`, is LGPL-2.1-or-later, which is the only non-permissive
+  licence anywhere in the tree. Nothing here is redistributed: the image runs on Cloud Run and is
+  never conveyed to a third party, and this repository vendors no dependency source. Left in place
+  rather than pruned, because changing the dependency tree of the required agent framework days
+  before a deadline buys less than it risks.

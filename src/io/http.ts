@@ -43,6 +43,8 @@ const DEFAULT_TIMEOUT_MS = 20_000;
  * chooses its size, and this container has 512 MB.
  */
 const DEFAULT_MAX_BYTES = 24 * 1024 * 1024;
+
+type BodyRead = { ok: true; text: string } | { ok: false; reason: 'too-large' | 'cut-short' };
 const BASE_BACKOFF_MS = 500;
 const MAX_BACKOFF_MS = 8_000;
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -160,10 +162,13 @@ export class RunFetcher {
 
       if (response.ok) {
         const body = await this.readBounded(response);
-        if (body === null) {
+        if (body.ok) return { ok: true, value: body.text, fromCache: false };
+        if (body.reason === 'too-large') {
           return failure('malformed', response.status, `body over ${this.maxBytes} bytes: ${url}`);
         }
-        return { ok: true, value: body, fromCache: false };
+        // The headers arrived and the body did not. The status was a success, so this is not a
+        // failure the retry ladder above knows about; it is still a source that could not be read.
+        return failure('unavailable', response.status, `body did not arrive from ${url}`);
       }
       lastStatus = response.status;
 
@@ -188,12 +193,13 @@ export class RunFetcher {
    * decides how much memory to take from a `content-length` the sender wrote. A sender who lies
    * about that header, or omits it, is exactly the case the cap is for.
    */
-  private async readBounded(response: Response): Promise<string | null> {
+  private async readBounded(response: Response): Promise<BodyRead> {
     const declared = Number(response.headers.get('content-length'));
-    if (Number.isFinite(declared) && declared > this.maxBytes) return null;
+    if (Number.isFinite(declared) && declared > this.maxBytes)
+      return { ok: false, reason: 'too-large' };
 
     const body = response.body;
-    if (!body) return response.text();
+    if (!body) return { ok: true, text: await response.text() };
 
     const decoder = new TextDecoder();
     const reader = body.getReader();
@@ -206,14 +212,18 @@ export class RunFetcher {
         if (chunk.done) break;
 
         read += chunk.value.byteLength;
-        if (read > this.maxBytes) return null;
+        if (read > this.maxBytes) return { ok: false, reason: 'too-large' };
         text += decoder.decode(chunk.value, { stream: true });
       }
+    } catch {
+      // A body that stops arriving mid-stream aborts here, after the headers already said 200.
+      // Every other failure in this class is returned rather than thrown, and so is this one.
+      return { ok: false, reason: 'cut-short' };
     } finally {
       await reader.cancel().catch(() => undefined);
     }
 
-    return text + decoder.decode();
+    return { ok: true, text: text + decoder.decode() };
   }
 
   private async send(url: string, headers: Record<string, string>): Promise<Response | null> {
