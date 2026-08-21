@@ -14,22 +14,46 @@ export const BRIEF_SCHEMA_VERSION = '1.0.0';
  * other than data: there is no free-form object, no passthrough key, and nothing an instruction
  * could be smuggled through at unbounded length.
  */
+const CAP = {
+  headline: 120,
+  whatChanged: 1500,
+  line: 400,
+  items: 12,
+  claimPath: 200,
+  claimSymbol: 80,
+  claimQuote: 400,
+  claimSource: 300,
+} as const;
+
 export const claimSchema = z.strictObject({
-  path: z.string().min(1).max(200),
+  path: z.string().min(1).max(CAP.claimPath),
   line: z.number().int().min(1).max(1_000_000),
-  symbol: z.string().min(1).max(80),
-  quote: z.string().min(1).max(400),
-  source: z.string().min(1).max(300),
+  symbol: z.string().min(1).max(CAP.claimSymbol),
+  quote: z.string().min(1).max(CAP.claimQuote),
+  source: z.string().min(1).max(CAP.claimSource),
 });
 
 const briefShape = {
-  headline: z.string().min(1).max(120),
-  whatChanged: z.string().min(1).max(1500),
-  breakingChanges: z.array(z.string().min(1).max(400)).max(12),
-  breaksHere: z.array(claimSchema).max(12),
-  migrationSteps: z.array(z.string().min(1).max(400)).max(12),
+  headline: z.string().min(1).max(CAP.headline),
+  whatChanged: z.string().min(1).max(CAP.whatChanged),
+  breakingChanges: z.array(z.string().min(1).max(CAP.line)).max(CAP.items),
+  breaksHere: z.array(claimSchema).max(CAP.items),
+  migrationSteps: z.array(z.string().min(1).max(CAP.line)).max(CAP.items),
   confidence: z.enum(['high', 'medium', 'low']),
 };
+
+/**
+ * The longest answer this schema calls legal, in characters. It exists so the model's output token
+ * budget can be checked against it: a budget too small to hold a legitimate brief cuts the answer
+ * off mid-JSON, and that arrives looking like a model that misbehaved rather than a cap nobody
+ * sized. Field names, punctuation and escaping are the flat allowance on the end.
+ */
+export const BRIEF_MAX_CHARS =
+  CAP.headline +
+  CAP.whatChanged +
+  CAP.items * CAP.line * 2 +
+  CAP.items * (CAP.claimPath + CAP.claimSymbol + CAP.claimQuote + CAP.claimSource) +
+  400;
 
 export const briefPayloadSchema = z.strictObject(briefShape);
 

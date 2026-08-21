@@ -11,14 +11,21 @@ import {
 import { briefModelSchema } from '../core/brief.js';
 import { BRIEF_MODEL } from '../core/stack.js';
 import { briefInstruction, briefMessage, type BriefMaterial, type BriefRequest } from './prompt.js';
-import type { BriefEngine } from './write-brief.js';
+import { ModelRefusal, type BriefEngine } from './write-brief.js';
 
 /** The model the About page names, so the page and the call cannot drift apart. */
 export const DEFAULT_BRIEF_MODEL = BRIEF_MODEL;
 
 const APP_NAME = 'bumpwarden';
 const USER_ID = 'bumpwarden-run';
-const MAX_OUTPUT_TOKENS = 2048;
+
+/**
+ * Large enough to hold the longest brief the schema calls legal. At 2048 a full answer ran out of
+ * room mid-object and came back as text with no closing brace, which the caller could only report
+ * as a missing JSON object. `adk-engine.test.ts` fails if the schema ever outgrows this. Nothing is
+ * paid for room that goes unused, so the ceiling costs only what a brief actually writes.
+ */
+export const MAX_OUTPUT_TOKENS = 8192;
 
 export interface AdkBriefEngineOptions {
   apiKey: string;
@@ -66,6 +73,33 @@ function textOf(event: Event): string {
     .trim();
 }
 
+/** The API states its own wait inside the message, and it is the only place that number exists. */
+const RETRY_HINT = /retry in ([\d.]+)s/i;
+
+interface Refusal {
+  code: string;
+  message: string;
+}
+
+/**
+ * A refused call arrives as an error field on an event rather than as a thrown exception, and the
+ * loop below would otherwise finish with an empty answer and no idea why. The free tier's limit is
+ * 20 model requests a minute, so this is the ordinary failure on a real queue.
+ */
+function refusalOf(event: Event): Refusal | null {
+  const raw = event as unknown as { errorCode?: unknown; errorMessage?: unknown };
+  if (typeof raw.errorCode !== 'string' || raw.errorCode.length === 0) return null;
+  return {
+    code: raw.errorCode,
+    message: typeof raw.errorMessage === 'string' ? raw.errorMessage : 'no detail was given',
+  };
+}
+
+export function retryDelayFrom(message: string): number | null {
+  const seconds = Number(RETRY_HINT.exec(message)?.[1]);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds * 1000) : null;
+}
+
 /**
  * The real Gemini path. It is created from an explicit key rather than from the ambient
  * environment so that a test, a script or a second instance can never pick one up by accident.
@@ -97,14 +131,23 @@ export function createAdkBriefEngine(options: AdkBriefEngineOptions): BriefEngin
       });
 
       let answer = '';
+      let refusal: Refusal | null = null;
+
       for await (const event of runner.runEphemeral({
         userId: USER_ID,
         newMessage: { role: 'user', parts: [{ text: briefMessage(request, material, attempt) }] },
       })) {
+        refusal = refusalOf(event) ?? refusal;
         if (isFinalResponse(event)) {
           const text = textOf(event);
           if (text.length > 0) answer = text;
         }
+      }
+
+      // An answer that arrived stands even if some earlier event carried an error: what the caller
+      // needs is the brief, and a refusal only matters when it is the reason there is not one.
+      if (answer.length === 0 && refusal) {
+        throw new ModelRefusal(refusal.code, refusal.message, retryDelayFrom(refusal.message));
       }
 
       return answer;

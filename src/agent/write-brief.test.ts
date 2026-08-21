@@ -3,7 +3,14 @@ import { briefCacheKey, type BriefRecord } from '../core/brief.js';
 import { RUBRIC_VERSION } from '../core/rubric.js';
 import { EXPRESS_NOTES, NOW, candidateBump, summaryOf } from '../testkit/fixtures.js';
 import type { BriefMaterial, BriefRequest } from './prompt.js';
-import { extractJson, writeBrief, type BriefCache, type BriefEngine } from './write-brief.js';
+import {
+  ModelRefusal,
+  extractJson,
+  readAnswer,
+  writeBrief,
+  type BriefCache,
+  type BriefEngine,
+} from './write-brief.js';
 
 const VALID = {
   headline: 'Two removed methods are called in your routes',
@@ -193,6 +200,91 @@ describe('the brief cache', () => {
   });
 });
 
+/**
+ * A live run met this: the free tier allows 20 model requests a minute, a bump costs two, and the
+ * API answers a burst with 429 and the wait it wants. Retrying inside that wait spends a second
+ * request on the same limit and fails again, so both attempts were lost to one busy minute.
+ */
+describe('a call the model refused', () => {
+  it('waits the time the API asked for before trying again, and says what refused', async () => {
+    const waits: number[] = [];
+    const refusal = new ModelRefusal('429', 'quota exceeded, retry in 10.5s', 10_500);
+    const scripted = engine([refusal, JSON.stringify(VALID)]);
+
+    const record = await writeBrief(request(), {
+      ...options(scripted),
+      wait: async (ms) => {
+        waits.push(ms);
+      },
+    });
+
+    expect(waits).toEqual([10_500]);
+    expect(record.status).toBe('ready');
+    expect(record.attempts).toBe(2);
+  });
+
+  it('names the refusal in the reason rather than calling it an empty answer', async () => {
+    const refusal = new ModelRefusal('429', 'quota exceeded', 500);
+    const record = await writeBrief(request(), {
+      ...options(engine([refusal])),
+      wait: async () => undefined,
+    });
+
+    expect(record.status).toBe('unavailable');
+    expect(record.reason).toContain('the model refused with 429');
+  });
+
+  /**
+   * The live message opens with the same boilerplate every time and names the quota, the limit and
+   * the wait at the very end, so a reason cut from the front is the half that says nothing.
+   */
+  it('keeps the end of a long refusal, which is the part that identifies it', async () => {
+    const refusal = new ModelRefusal(
+      '429',
+      `You exceeded your current quota. ${'boilerplate. '.repeat(30)}Quota exceeded for metric: generate_content_free_tier_requests, limit: 20. Please retry in 10.5s.`,
+      10_500,
+    );
+
+    const record = await writeBrief(request(), {
+      ...options(engine([refusal])),
+      wait: async () => undefined,
+    });
+
+    expect(record.reason).toContain('limit: 20');
+    expect(record.reason).toContain('Please retry in 10.5s.');
+    expect(record.reason).not.toContain('You exceeded your current quota');
+  });
+
+  /** A hint of an hour would park a run behind one bump. The cap is what keeps the run moving. */
+  it('never waits longer than half a minute, whatever the hint says', async () => {
+    const waits: number[] = [];
+    const refusal = new ModelRefusal('429', 'retry in 3600s', 3_600_000);
+
+    await writeBrief(request(), {
+      ...options(engine([refusal, JSON.stringify(VALID)])),
+      wait: async (ms) => {
+        waits.push(ms);
+      },
+    });
+
+    expect(waits).toEqual([30_000]);
+  });
+
+  it('does not wait after the last attempt, because nothing follows it', async () => {
+    const waits: number[] = [];
+    const refusal = new ModelRefusal('429', 'retry in 5s', 5_000);
+
+    await writeBrief(request(), {
+      ...options(engine([refusal, refusal])),
+      wait: async (ms) => {
+        waits.push(ms);
+      },
+    });
+
+    expect(waits).toEqual([5_000]);
+  });
+});
+
 describe('reading JSON out of an answer', () => {
   it('reads a bare object', () => {
     expect(extractJson('{"a":1}')).toEqual({ a: 1 });
@@ -216,5 +308,42 @@ describe('reading JSON out of an answer', () => {
 
   it('returns null for a broken object rather than throwing', () => {
     expect(extractJson('{"a": ')).toBeNull();
+  });
+});
+
+/**
+ * A live run over a real repository recorded "no JSON object in the answer" twice, and that one
+ * sentence covers three different failures with three different fixes. The one it hides is the
+ * expensive one: an answer cut off at the output token cap begins as valid JSON and simply never
+ * closes, so it reads as a model that misbehaved rather than a budget nobody sized.
+ */
+describe('what a failed answer is told to have been', () => {
+  it('separates nothing, prose, a cut-off answer and malformed JSON', () => {
+    expect(readAnswer('')).toMatchObject({ ok: false, problem: 'the model returned nothing' });
+    expect(readAnswer('   \n ')).toMatchObject({
+      ok: false,
+      problem: 'the model returned nothing',
+    });
+
+    expect(readAnswer('I could not read the release notes.')).toMatchObject({
+      ok: false,
+      problem: 'the answer was prose rather than JSON, 35 characters',
+    });
+
+    const cut = `{"headline":"${'x'.repeat(90)}`;
+    expect(readAnswer(cut)).toMatchObject({
+      ok: false,
+      problem:
+        'the answer stopped before its JSON closed, 103 characters, which is what the output token cap looks like',
+    });
+
+    expect(readAnswer('{"a": oops}')).toMatchObject({
+      ok: false,
+      problem: 'the answer held JSON that would not parse, 11 characters',
+    });
+  });
+
+  it('still reads a good answer', () => {
+    expect(readAnswer('```json\n{"a":1}\n```')).toEqual({ ok: true, value: { a: 1 } });
   });
 });
