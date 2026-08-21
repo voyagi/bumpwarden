@@ -7,7 +7,13 @@ import {
   type RunRecord,
   type WatchedRepository,
 } from '../core/records.js';
-import type { ActionQuery, BumpQuery, BumpwardenStore } from './store.js';
+import {
+  claimHeld,
+  type ActionQuery,
+  type BumpQuery,
+  type BumpwardenStore,
+  type RunClaim,
+} from './store.js';
 
 function copy<T>(value: T): T {
   return structuredClone(value);
@@ -28,6 +34,24 @@ export class MemoryStore implements BumpwardenStore {
   private readonly bumps = new Map<string, BumpRecord>();
   private readonly actions = new Map<string, ActionRecord>();
   private readonly briefs = new Map<string, BriefRecord>();
+  private readonly claims = new Map<string, RunClaim>();
+
+  /**
+   * There is no await between the read and the write, so this whole method is one turn of the event
+   * loop and no second caller can interleave with it. That is what makes it the same guarantee the
+   * Firestore transaction gives, rather than the same race in a smaller box.
+   */
+  async claimRun(claim: RunClaim): Promise<boolean> {
+    const held = this.claims.get(claim.key);
+    if (held && claimHeld(held, claim.holder, claim.claimedAt)) return false;
+
+    this.claims.set(claim.key, copy(claim));
+    return true;
+  }
+
+  async releaseRun(key: string, holder: string): Promise<void> {
+    if (this.claims.get(key)?.holder === holder) this.claims.delete(key);
+  }
 
   async listWatchedRepositories(): Promise<WatchedRepository[]> {
     return [...this.projects.values()].map((summary) => copy(summary.repository));

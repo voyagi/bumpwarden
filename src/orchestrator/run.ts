@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { writeBrief, type BriefEngine } from '../agent/write-brief.js';
 import type { BriefRequest } from '../agent/prompt.js';
 import { briefCacheKey, unavailableBrief, type BriefRecord } from '../core/brief.js';
@@ -32,7 +33,7 @@ import type { RepositoryActor } from '../io/github-actor.js';
 import type { RepoRef } from '../io/github.js';
 import type { RunFetcher } from '../io/http.js';
 import { silentLogger, type Logger } from '../io/log.js';
-import type { BumpwardenStore } from '../io/store.js';
+import { RUN_CLAIM_KEY, type BumpwardenStore } from '../io/store.js';
 import { actOnBump, type ActContext } from './act.js';
 import { ingestRepository } from './ingest.js';
 import { collectSourceFiles } from './source-files.js';
@@ -341,14 +342,58 @@ async function runRepository(
 }
 
 /**
+ * Thrown rather than returned as a run record: a refused start produced no run, and inventing an
+ * empty one would put a run in the audit log that never happened.
+ */
+export class RunInProgressError extends Error {
+  constructor() {
+    super('a run is already going');
+    this.name = 'RunInProgressError';
+  }
+}
+
+/**
+ * How long a claim stands before another run may take it. Long enough to cover the run's own time
+ * budget plus the reads and writes around it, short enough that a container killed mid-run does not
+ * leave the button dead for an afternoon.
+ */
+const CLAIM_LEASE_MS = (RUN_TIME_BUDGET_SECONDS + 600) * 1000;
+
+/**
  * The one run path. Cloud Scheduler's OIDC call and the dashboard's "Run now" both land here and
  * differ only in the recorded trigger, so what a judge sees after pressing the button is the same
  * artifact the nightly run produces.
  */
 export async function executeRun(deps: RunDependencies, options: RunOptions): Promise<RunRecord> {
-  const logger = deps.logger ?? silentLogger;
   const startedAt = deps.now();
   const id = runIdFor(startedAt, options.trigger);
+
+  // Claimed before anything is read or written. The status check in front of the button is a
+  // courtesy that tells a visitor why; this is the thing that actually stops a second run.
+  const holder = randomUUID();
+  const claimed = await deps.store.claimRun({
+    key: RUN_CLAIM_KEY,
+    holder,
+    runId: id,
+    claimedAt: startedAt.toISOString(),
+    expiresAt: new Date(startedAt.getTime() + CLAIM_LEASE_MS).toISOString(),
+  });
+  if (!claimed) throw new RunInProgressError();
+
+  try {
+    return await runClaimed(deps, options, id, startedAt);
+  } finally {
+    await deps.store.releaseRun(RUN_CLAIM_KEY, holder);
+  }
+}
+
+async function runClaimed(
+  deps: RunDependencies,
+  options: RunOptions,
+  id: string,
+  startedAt: Date,
+): Promise<RunRecord> {
+  const logger = deps.logger ?? silentLogger;
 
   const watched = await deps.store.listWatchedRepositories();
   const repositories = options.repositoryId

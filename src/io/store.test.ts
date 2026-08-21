@@ -15,7 +15,17 @@ import {
 } from '../testkit/fixtures.js';
 import { FirestoreStore } from './firestore-store.js';
 import { MemoryStore } from './memory-store.js';
-import type { BumpwardenStore } from './store.js';
+import { RUN_CLAIM_KEY, type BumpwardenStore, type RunClaim } from './store.js';
+
+function claim(holder: string): RunClaim {
+  return {
+    key: RUN_CLAIM_KEY,
+    holder,
+    runId: `run-${holder}`,
+    claimedAt: NOW.toISOString(),
+    expiresAt: new Date(NOW.getTime() + 20 * 60_000).toISOString(),
+  };
+}
 
 const EMULATOR = process.env.FIRESTORE_EMULATOR_HOST;
 /** The `demo-` prefix is Firebase's marker for a project with no live resources behind it. */
@@ -186,6 +196,47 @@ function storeContract(name: string, create: () => Promise<BumpwardenStore>): vo
       expect(mine).toHaveLength(1);
     });
 
+    it('gives the run lease to one caller and refuses the next', async () => {
+      expect(await store.claimRun(claim('run-a'))).toBe(true);
+      expect(await store.claimRun(claim('run-b'))).toBe(false);
+    });
+
+    it('lets the holder re-take its own lease, so a retry is not a deadlock', async () => {
+      await store.claimRun(claim('run-a'));
+      expect(await store.claimRun(claim('run-a'))).toBe(true);
+    });
+
+    it('frees the lease on release, and only for the run that holds it', async () => {
+      await store.claimRun(claim('run-a'));
+      await store.releaseRun(RUN_CLAIM_KEY, 'run-b');
+      expect(await store.claimRun(claim('run-c'))).toBe(false);
+
+      await store.releaseRun(RUN_CLAIM_KEY, 'run-a');
+      expect(await store.claimRun(claim('run-c'))).toBe(true);
+    });
+
+    it('hands an expired lease to the next caller, so a killed container is not permanent', async () => {
+      await store.claimRun({
+        key: RUN_CLAIM_KEY,
+        holder: 'dead',
+        runId: 'run-dead',
+        claimedAt: '2026-08-21T07:00:00.000Z',
+        expiresAt: '2026-08-21T07:30:00.000Z',
+      });
+      expect(await store.claimRun(claim('run-next'))).toBe(true);
+    });
+
+    it('treats an unreadable expiry as still held rather than free', async () => {
+      await store.claimRun({
+        key: RUN_CLAIM_KEY,
+        holder: 'corrupt',
+        runId: 'run-corrupt',
+        claimedAt: NOW.toISOString(),
+        expiresAt: 'whenever',
+      });
+      expect(await store.claimRun(claim('run-next'))).toBe(false);
+    });
+
     it('stores and returns a brief by its cache key', async () => {
       const brief = readyBrief();
       await store.putBrief(brief);
@@ -225,7 +276,7 @@ async function resetEmulator(): Promise<FirestoreStore> {
   }
 
   const client = new Firestore({ projectId: EMULATOR_PROJECT, ignoreUndefinedProperties: true });
-  for (const collection of ['projects', 'runs', 'actions', 'briefs']) {
+  for (const collection of ['projects', 'runs', 'actions', 'briefs', 'locks']) {
     await client.recursiveDelete(client.collection(collection));
   }
 

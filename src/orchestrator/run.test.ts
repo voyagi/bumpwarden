@@ -6,11 +6,11 @@ import { RepositoryActor } from '../io/github-actor.js';
 import { RunFetcher } from '../io/http.js';
 import { createLogger } from '../io/log.js';
 import { MemoryStore } from '../io/memory-store.js';
-import type { BumpwardenStore } from '../io/store.js';
+import { RUN_CLAIM_KEY, type BumpwardenStore } from '../io/store.js';
 import { fakeGitHub, type FakeGitHub } from '../testkit/fake-github.js';
 import { DEMO, MANIFEST_JSON, NOW } from '../testkit/fixtures.js';
 import { json, routedFetch, urlContains, type Route } from '../testkit/scripted-fetch.js';
-import { executeRun, resolveBudgets, type RunDependencies } from './run.js';
+import { RunInProgressError, executeRun, resolveBudgets, type RunDependencies } from './run.js';
 
 const MANIFEST = {
   name: 'demo-app',
@@ -142,6 +142,8 @@ async function harness(overrides: Partial<RunDependencies> = {}): Promise<Harnes
     },
     listWatchedRepositories: () => store.listWatchedRepositories(),
     putWatchedRepository: (repository) => store.putWatchedRepository(repository),
+    claimRun: (claim) => store.claimRun(claim),
+    releaseRun: (key, runId) => store.releaseRun(key, runId),
     getRun: (id) => store.getRun(id),
     listRuns: (limit) => store.listRuns(limit),
     saveBump: (bump) => store.saveBump(bump),
@@ -192,6 +194,46 @@ describe('one run over one repository', () => {
     expect(context.saved[0]).toMatchObject({ status: 'running', finishedAt: null });
     expect(context.saved.at(-1)).toMatchObject({ status: 'finished' });
     expect(context.saved.at(-1)?.finishedAt).not.toBeNull();
+  });
+
+  /**
+   * The dashboard's run button is public and unauthenticated, so this is not a theoretical race:
+   * five POSTs in the same tick all read "nothing is running" and, before the lease, all five ran.
+   * Each run spends the Gemini budget, the GitHub write budget and the Firestore quota again, and
+   * two of them opening an issue for the same bump defeats the idempotency marker as well.
+   */
+  it('lets one of five simultaneous runs through and refuses the rest', async () => {
+    const context = await harness();
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 5 }, () => executeRun(context.deps, { trigger: 'manual' })),
+    );
+
+    const started = attempts.filter((attempt) => attempt.status === 'fulfilled');
+    const refused = attempts.filter(
+      (attempt) => attempt.status === 'rejected' && attempt.reason instanceof RunInProgressError,
+    );
+
+    expect(started).toHaveLength(1);
+    expect(refused).toHaveLength(4);
+    expect(await context.store.listRuns(10)).toHaveLength(1);
+  });
+
+  it('hands the lease back when a run fails, so the next press is not locked out', async () => {
+    const context = await harness();
+    context.deps.store.listWatchedRepositories = async () => {
+      throw new Error('the store is unreachable');
+    };
+
+    await expect(executeRun(context.deps, { trigger: 'manual' })).rejects.toThrow('unreachable');
+
+    const claimed = await context.store.claimRun({
+      key: RUN_CLAIM_KEY,
+      holder: 'someone-else',
+      runId: 'run-someone-else',
+      claimedAt: NOW.toISOString(),
+      expiresAt: new Date(NOW.getTime() + 60_000).toISOString(),
+    });
+    expect(claimed).toBe(true);
   });
 
   it('scores the bump, writes the brief and opens the action', async () => {

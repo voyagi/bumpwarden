@@ -9,13 +9,20 @@ import {
   type RunRecord,
   type WatchedRepository,
 } from '../core/records.js';
-import type { ActionQuery, BumpQuery, BumpwardenStore } from './store.js';
+import {
+  claimHeld,
+  type ActionQuery,
+  type BumpQuery,
+  type BumpwardenStore,
+  type RunClaim,
+} from './store.js';
 
 const PROJECTS = 'projects';
 const RUNS = 'runs';
 const ACTIONS = 'actions';
 const BRIEFS = 'briefs';
 const BUMPS = 'bumps';
+const LOCKS = 'locks';
 
 /**
  * Both list queries read one bounded page and filter in memory. Filtering server side would need a
@@ -63,6 +70,37 @@ export class FirestoreStore implements BumpwardenStore {
 
   private bumpsOf(repositoryId: string): CollectionReference {
     return this.projectDoc(repositoryId).collection(BUMPS);
+  }
+
+  /**
+   * A transaction rather than a read followed by a write. Cloud Run can be serving the run button
+   * from several instances at once, so a guard held in one process would let each instance start
+   * its own run; only Firestore sees all of them.
+   */
+  async claimRun(claim: RunClaim): Promise<boolean> {
+    const ref = this.db.collection(LOCKS).doc(documentId(claim.key));
+
+    return this.db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (snapshot.exists) {
+        const held = snapshot.data() as RunClaim;
+        if (claimHeld(held, claim.holder, claim.claimedAt)) return false;
+      }
+
+      transaction.set(ref, claim);
+      return true;
+    });
+  }
+
+  async releaseRun(key: string, holder: string): Promise<void> {
+    const ref = this.db.collection(LOCKS).doc(documentId(key));
+
+    await this.db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) return;
+      if ((snapshot.data() as RunClaim).holder !== holder) return;
+      transaction.delete(ref);
+    });
   }
 
   async listWatchedRepositories(): Promise<WatchedRepository[]> {
