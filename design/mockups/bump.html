@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bumpwarden - express 4.18.2 to 5.2.1</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Overpass:wght@300..800&family=Overpass+Mono:wght@300..700&family=Newsreader:ital,opsz,wght@0,6..72,200..700;1,6..72,200..700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="signalbox.css" />
+  </head>
+  <body>
+    <div class="frame">
+      <nav class="rail" aria-label="Watched projects">
+        <span class="rail__mark">Frame</span>
+        <a
+          class="lever lever--red lever--thrown"
+          href="project.html"
+          aria-current="page"
+          aria-label="bumpwarden-demo-app"
+        >
+          <span class="lever__ball"></span>
+          <span class="lever__shaft"></span>
+          <span class="lever__plate">1</span>
+        </a>
+        <a class="lever lever--clear" href="home.html" aria-label="bumpwarden">
+          <span class="lever__ball"></span>
+          <span class="lever__shaft"></span>
+          <span class="lever__plate">2</span>
+        </a>
+        <a class="lever lever--spare" href="home.html" aria-label="Spare lever, add a repository">
+          <span class="lever__ball"></span>
+          <span class="lever__shaft"></span>
+          <span class="lever__plate">3</span>
+        </a>
+      </nav>
+
+      <main>
+        <header class="shelf">
+          <div class="shelf__mark">
+            <span class="wordmark">bump<span>warden</span></span>
+            <span class="shelf__caption">Dependency block post</span>
+          </div>
+          <div class="instrument">
+            <span class="instrument__label">Bump</span>
+            <span class="instrument__value">express 4.18.2 to 5.2.1</span>
+          </div>
+          <div class="instrument">
+            <span class="instrument__label">Rubric</span>
+            <span class="instrument__value">v1.0.0</span>
+          </div>
+          <div class="lamps">
+            <span class="lamp lamp--stop">
+              <span class="lamp__disc"></span>
+              <span><span class="lamp__count">62</span><span class="lamp__word">Held</span></span>
+            </span>
+          </div>
+        </header>
+
+        <div class="sheet">
+          <p class="eyebrow">bumpwarden-demo-app &middot; lever 4</p>
+          <h1 class="page-title">express 4.18.2 to 5.2.1</h1>
+          <p class="locking__note">
+            Every factor below is computed from a source you can open. The sum decides the band, and
+            the band decides the action. Nothing here is a judgement call.
+          </p>
+
+          <div class="detail">
+            <div>
+              <table class="locking">
+                <caption>
+                  Locking table
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Factor</th>
+                    <th scope="col">Evidence</th>
+                    <th scope="col">Locks</th>
+                    <th scope="col">Points</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Semver distance, one major</td>
+                    <td><a href="https://registry.npmjs.org/express">npm registry</a></td>
+                    <td class="locks">auto-merge</td>
+                    <td class="pts">30</td>
+                  </tr>
+                  <tr>
+                    <td>Repository uses a changed symbol</td>
+                    <td>src/routes/files.ts, src/routes/docs.ts</td>
+                    <td class="locks">pull request</td>
+                    <td class="pts">20</td>
+                  </tr>
+                  <tr>
+                    <td>Breaking marker in the migration guide</td>
+                    <td>
+                      <a href="https://expressjs.com/en/guide/migrating-5.html">expressjs.com</a>
+                    </td>
+                    <td class="locks">pull request</td>
+                    <td class="pts">12</td>
+                  </tr>
+                  <tr>
+                    <td>Candidate release age, 263 days</td>
+                    <td><a href="https://registry.npmjs.org/express">published 2025-12-01</a></td>
+                    <td class="locks">nothing</td>
+                    <td class="pts pts--zero">0</td>
+                  </tr>
+                  <tr>
+                    <td>Advisories on the candidate</td>
+                    <td>
+                      <a href="https://api.deps.dev/v3alpha/systems/npm/packages/express">
+                        deps.dev, none
+                      </a>
+                    </td>
+                    <td class="locks">nothing</td>
+                    <td class="pts pts--zero">0</td>
+                  </tr>
+                  <tr>
+                    <td>Engine range raised above yours</td>
+                    <td>candidate needs Node 18, you declare Node 18</td>
+                    <td class="locks">nothing</td>
+                    <td class="pts pts--zero">0</td>
+                  </tr>
+                  <tr>
+                    <td>Deprecation on either version</td>
+                    <td>neither is deprecated</td>
+                    <td class="locks">nothing</td>
+                    <td class="pts pts--zero">0</td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="3">Total, band red at 61</td>
+                    <td class="pts">62</td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              <article class="notice">
+                <p class="notice__meta">Machine explanation, not verdict</p>
+                <h2>Two of your routes stop matching</h2>
+                <p>
+                  Express 5 replaces the route parser. Optional parameters written with a trailing
+                  question mark are gone, and an unnamed wildcard is no longer accepted. Both forms
+                  appear in this repository, so those routes would return 404 after the bump rather
+                  than fail loudly at boot.
+                </p>
+                <blockquote>
+                  "The optional character <code>?</code> is no longer supported, use braces
+                  instead." and "The wildcard <code>*</code> must have a name, matching the behavior
+                  of parameters <code>:</code>, use <code>/*splat</code> instead of
+                  <code>/*</code>."
+                </blockquote>
+                <ul class="evidence">
+                  <li>src/routes/files.ts:18 &nbsp; app.get('/:file.:ext?', ...)</li>
+                  <li>src/routes/docs.ts:7 &nbsp; app.get('/*', ...)</li>
+                </ul>
+                <p>
+                  Migration: rewrite line 18 as <code>'/:file{.:ext}'</code>, rewrite line 7 as
+                  <code>'/*splat'</code>, then run the route tests. Confidence: high. Both sites
+                  were matched against the migration guide by name, not inferred.
+                </p>
+              </article>
+            </div>
+
+            <div class="aside-stack">
+              <aside class="scoreplate">
+                <div class="scoreplate__num">62</div>
+                <div class="gauge gauge--stop"><span style="width: 62%"></span></div>
+                <div class="scoreplate__band">Red &middot; hold</div>
+                <p class="scoreplate__rule">
+                  Rule RED-HOLD-1: open a hold issue with a migration plan, apply the
+                  bumpwarden:hold label, do not open a pull request.
+                </p>
+                <p class="scoreplate__rule">Rubric v1.0.0, unchanged since 2026-08-20.</p>
+              </aside>
+
+              <div>
+                <h2>Action log</h2>
+                <div class="stubs stubs--stacked">
+                  <div class="stub">
+                    <div class="stub__time">2026-08-21 06:03:58</div>
+                    <div class="stub__what">Updated hold issue 38</div>
+                  </div>
+                  <div class="stub">
+                    <div class="stub__time">2026-08-20 18:02:11</div>
+                    <div class="stub__what">Opened hold issue 38</div>
+                  </div>
+                  <div class="stub">
+                    <div class="stub__time">2026-08-20 18:02:09</div>
+                    <div class="stub__what">Scored 62, rubric v1.0.0</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
