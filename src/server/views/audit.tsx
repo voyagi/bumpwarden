@@ -1,5 +1,6 @@
 import type { JSX } from 'hono/jsx/jsx-runtime';
 import { utcStamp, type FeedRow } from '../view-model.js';
+import { Linked } from './link.js';
 import { StatePanel } from './states.js';
 
 export interface AuditProps {
@@ -15,22 +16,10 @@ function Row(props: { row: FeedRow }): JSX.Element {
         {utcStamp(row.at)}
       </span>
       <span class="who" role="cell">
-        {row.titleHref ? (
-          <a class="plain" href={row.titleHref}>
-            {row.title}
-          </a>
-        ) : (
-          row.title
-        )}
+        <Linked href={row.titleHref} label={row.title} />
       </span>
       <span role="cell">
-        {row.detailHref ? (
-          <a class="plain" href={row.detailHref} rel="noreferrer">
-            {row.detail}
-          </a>
-        ) : (
-          row.detail
-        )}
+        <Linked href={row.detailHref} label={row.detail} />
       </span>
       <span role="cell">
         <span class="chip">{row.chip}</span>

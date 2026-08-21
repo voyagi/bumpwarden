@@ -10,6 +10,7 @@ import {
   trackWidth,
   verdictWord,
 } from '../view-model.js';
+import { Linked } from './link.js';
 
 /** Marks arrive one after another rather than all at once, at the art direction's 18ms step. */
 const STAGGER_MS = 18;
@@ -110,11 +111,7 @@ function Evidence(props: { evidence: string }): JSX.Element {
     <>
       {', '}
       {parts.before}
-      {parts.href ? (
-        <a class="plain" href={parts.href} rel="noreferrer">
-          {parts.label}
-        </a>
-      ) : null}
+      {parts.href ? <Linked href={parts.href} label={parts.label} /> : null}
       {parts.after}
     </>
   );

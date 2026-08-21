@@ -9,6 +9,7 @@ import {
 import { bumpPath, projectPath } from '../../core/routes.js';
 import type { Band, MissingSource } from '../../core/types.js';
 import type { RunNowStatus } from '../run-now.js';
+import { Linked } from './link.js';
 import {
   WORD_COLOR,
   actionLabel,
@@ -111,9 +112,7 @@ function QueueRow(props: { bump: BumpRecord; index: number }): JSX.Element {
         {bump.brief.content?.headline ?? topFactorSentence(bump.score)}
         <br />
         {action?.url ? (
-          <a class="out" href={action.url} rel="noreferrer">
-            {actionLabel(action)}
-          </a>
+          <Linked href={action.url} label={actionLabel(action)} class="out" />
         ) : (
           <span class="none">{action ? actionLabel(action) : 'No action recorded'}</span>
         )}

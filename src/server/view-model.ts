@@ -140,6 +140,29 @@ export function actionLabel(action: ActionRecord): string {
   return `${ACTION_NOUN[action.kind]} #${action.number}`;
 }
 
+/**
+ * The only schemes a link on a page may carry. Every href that is not a literal arrives from
+ * outside: a GitHub API response, a deps.dev advisory, or the agent's own answer about release
+ * notes a stranger wrote and can therefore aim. JSX escapes an attribute's characters without
+ * judging its scheme, so `javascript:` in any one of those fields would be a script this page runs
+ * on a click. Anything that is not http, https or one of this site's own paths loses its link and
+ * is shown as text, because dropping the evidence would hide what the agent actually said.
+ */
+const LINKABLE = new Set(['http:', 'https:']);
+
+export function safeHref(value: string | null | undefined): string | null {
+  if (!value) return null;
+  // A single leading slash is a path this repository built. Two is a protocol-relative url, which
+  // is somebody else's host wearing the same shape.
+  if (value.startsWith('/')) return value.startsWith('//') ? null : value;
+
+  try {
+    return LINKABLE.has(new URL(value).protocol) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 const URL_IN_TEXT = /https?:\/\/\S+/;
 
 export interface EvidenceParts {

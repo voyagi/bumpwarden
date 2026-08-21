@@ -4,6 +4,7 @@ import { ruleFor } from '../../core/policy.js';
 import type { ActionRecord, BumpRecord } from '../../core/records.js';
 import { projectPath } from '../../core/routes.js';
 import { utcStamp, utcTime, verdictWord } from '../view-model.js';
+import { Linked } from './link.js';
 import { FactorRows, Spread } from './marks.js';
 
 export interface BumpProps {
@@ -34,10 +35,7 @@ function Claims(props: { brief: BriefRecord }): JSX.Element | null {
             )}
           </p>
           <p class="c2">
-            {`"${claim.quote}"`}{' '}
-            <a class="src" href={claim.source} rel="noreferrer">
-              {claim.source}
-            </a>
+            {`"${claim.quote}"`} <Linked href={claim.source} label={claim.source} class="src" />
           </p>
         </div>
       ))}
@@ -128,13 +126,7 @@ function ActionLog(props: { bump: BumpRecord; actions: ActionRecord[] }): JSX.El
         {props.actions.map((action) => (
           <div key={action.id} class="f" style="grid-template-columns:1fr auto">
             <span>
-              {action.url ? (
-                <a class="plain" href={action.url} rel="noreferrer">
-                  {action.detail}
-                </a>
-              ) : (
-                action.detail
-              )}
+              <Linked href={action.url} label={action.detail} />
             </span>
             <b>{utcTime(action.at)}</b>
           </div>
