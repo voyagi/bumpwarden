@@ -10,10 +10,12 @@
 // as a full pass is how false ship-claims happen. This script runs the FULL
 // surface, in order, cheapest-first:
 //
-//   1. types - tsc --noEmit           (a green test run never proves this)
-//   2. tests - the FULL suite         (no --changed, no filters, one-shot run)
-//   3. lint  - the WHOLE repo         (never a changed-files subset)
-//   4. gate  - the committed floors   (complexity, duplication, boundaries, ...)
+//   1. types  - tsc --noEmit          (a green test run never proves this)
+//   2. tests  - the FULL suite        (no --changed, no filters, one-shot run)
+//   3. lint   - the WHOLE repo        (never a changed-files subset)
+//   4. format - the WHOLE repo        (a formatter nothing runs is a formatter that drifts)
+//   5. gate   - the committed floors  (complexity, duplication, boundaries, ...)
+//   6. build  - the shipped artifact  (--noEmit type-checks a config the deploy does not use)
 //
 // `gate` re-runs the type-check inside its own chain; the duplication is
 // deliberate - step 1 fails fast on the cheapest honest signal.
@@ -51,10 +53,12 @@ const STEP_TIMEOUT_MS =
   Number.isFinite(timeoutOverride) && timeoutOverride > 0 ? timeoutOverride : 30 * 60 * 1000;
 
 const STEPS = [
-  { name: 'types', cmd: 'npm run gate:types' }, // tsc --noEmit
-  { name: 'tests', cmd: 'npm test' },           // FULL suite, one-shot
-  { name: 'lint',  cmd: 'npm run lint' },       // WHOLE-repo lint
-  { name: 'gate',  cmd: 'npm run gate' },       // committed gate chain (floors)
+  { name: 'types',  cmd: 'npm run gate:types' }, // tsc --noEmit
+  { name: 'tests',  cmd: 'npm test' },           // FULL suite, one-shot
+  { name: 'lint',   cmd: 'npm run lint' },       // WHOLE-repo lint
+  { name: 'format', cmd: 'npm run format' },     // prettier --check, WHOLE repo
+  { name: 'gate',   cmd: 'npm run gate' },       // committed gate chain (floors)
+  { name: 'build',  cmd: 'npm run build' },      // the same command the Dockerfile runs
 ];
 
 const results = [];

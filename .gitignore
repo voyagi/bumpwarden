@@ -13,8 +13,11 @@ dist/
 build/
 *.log
 
+# tool output
+coverage/
+reports/
+.stryker-tmp/
+
 # OS
 .DS_Store
 Thumbs.db
-
-# local planning notes
