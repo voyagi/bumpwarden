@@ -24,3 +24,11 @@ jobs:
       # The client-secret scan needs built client assets to look at, so it runs after the build
       # and is pointed at the static directory the server ships.
       - run: node scripts/check-client-secrets.mjs public
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # The deploy is this image. A green test suite says nothing about whether it still builds,
+      # and finding that out during a deploy is finding out too late.
+      - run: docker build -t bumpwarden:ci .
