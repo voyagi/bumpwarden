@@ -16,6 +16,7 @@
     "**/*.md",
     "**/docs/**",
     "**/design/**",
+    "**/demo/**",
     "**/public/fonts/**",
     "**/package-lock.json"
   ]

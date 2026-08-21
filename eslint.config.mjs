@@ -13,6 +13,9 @@ export default tseslint.config(
       'dist/**',
       'coverage/**',
       'node_modules/**',
+      // Another repository's code, kept here so it can be published to the demo target. It is
+      // deliberately written against old majors, which is exactly what this config would reject.
+      'demo/**',
       // Dot-directories hold tooling and local scratch, never part of the product.
       '**/.*/**',
       '**/*.config.{ts,js,mjs,cjs}',
