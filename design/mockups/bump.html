@@ -91,7 +91,7 @@
                   </tr>
                   <tr>
                     <td>Repository uses a changed symbol</td>
-                    <td>src/routes/files.ts, src/routes/docs.ts</td>
+                    <td>res.sendfile at files.ts:18, app.del at docs.ts:7</td>
                     <td class="locks">pull request</td>
                     <td class="pts">20</td>
                   </tr>
@@ -142,27 +142,25 @@
 
               <article class="notice">
                 <p class="notice__meta">Machine explanation, not verdict</p>
-                <h2>Two of your routes stop matching</h2>
+                <h2>Two calls in your routes were removed</h2>
                 <p>
-                  Express 5 replaces the route parser. Optional parameters written with a trailing
-                  question mark are gone, and an unnamed wildcard is no longer accepted. Both forms
-                  appear in this repository, so those routes would return 404 after the bump rather
-                  than fail loudly at boot.
+                  Express 5 drops a set of methods that Express 4 still accepted. Two of them are
+                  called in this repository, and neither fails at boot: they throw the first time
+                  the route is hit, so the bump would look clean until a request arrives.
                 </p>
                 <blockquote>
-                  "The optional character <code>?</code> is no longer supported, use braces
-                  instead." and "The wildcard <code>*</code> must have a name, matching the behavior
-                  of parameters <code>:</code>, use <code>/*splat</code> instead of
-                  <code>/*</code>."
+                  "The <code>res.sendfile()</code> function has been replaced by a camel-cased
+                  version <code>res.sendFile()</code>." and "Express 5 no longer supports the
+                  <code>app.del()</code> function."
                 </blockquote>
                 <ul class="evidence">
-                  <li>src/routes/files.ts:18 &nbsp; app.get('/:file.:ext?', ...)</li>
-                  <li>src/routes/docs.ts:7 &nbsp; app.get('/*', ...)</li>
+                  <li>src/routes/files.ts:18 &nbsp; res.sendfile(resolve(req.params.name));</li>
+                  <li>src/routes/docs.ts:7 &nbsp; app.del('/:id', removeDoc);</li>
                 </ul>
                 <p>
-                  Migration: rewrite line 18 as <code>'/:file{.:ext}'</code>, rewrite line 7 as
-                  <code>'/*splat'</code>, then run the route tests. Confidence: high. Both sites
-                  were matched against the migration guide by name, not inferred.
+                  Migration: rename line 18 to <code>res.sendFile</code>, change line 7 to
+                  <code>app.delete</code>, then run the route tests. Confidence: high. Both symbols
+                  are named in the migration guide and matched in your code by name, not inferred.
                 </p>
               </article>
             </div>
