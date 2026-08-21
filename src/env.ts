@@ -16,7 +16,9 @@ export const env = createEnv({
     // Service account email Cloud Scheduler signs its OIDC token with; the run endpoint accepts
     // no other caller.
     RUN_INVOKER_EMAIL: z.string().email().optional(),
-    BASE_URL: z.string().url().optional(),
+    // Not BASE_URL: Vite and Vitest inject a BASE_URL of "/" into the process environment, which
+    // would fail this schema in every test run and in any tooling built on Vite.
+    SERVICE_BASE_URL: z.string().url().optional(),
     DEMO_REPO: z
       .string()
       .regex(/^[\w.-]+\/[\w.-]+$/, 'owner/repo')

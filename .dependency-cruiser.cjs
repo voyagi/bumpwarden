@@ -58,6 +58,9 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
+    // Without this, a type-only import is invisible, so a module every layer imports types from
+    // reads as an orphan, and a boundary crossed by `import type` is never caught.
+    tsPreCompilationDeps: true,
     ...(fs.existsSync(path.join(__dirname, 'tsconfig.json'))
       ? { tsConfig: { fileName: path.join(__dirname, 'tsconfig.json') } }
       : {}),
