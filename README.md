@@ -90,23 +90,37 @@ Fill in `.env` to go further:
 | `DEMO_REPO`               | The one repository dashboard visitors may trigger with "Run now".                                                                         |
 | `HOST`, `PORT`            | Where to listen. `HOST=all` means every interface, which is what the container image sets.                                                |
 
-Against a local Firestore, in two terminals:
+Against a local Firestore, in two terminals. The emulator ships with the Firebase CLI and needs a
+Java runtime; `GOOGLE_CLOUD_PROJECT` is what switches the store away from memory, so both variables
+have to be set or the emulator sits there unused:
 
 ```sh
+npm install -g firebase-tools                      # once, if you do not have it
 npm run emulator                                   # terminal one, serves on 8081
+
 $env:FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081'    # terminal two, PowerShell
+$env:GOOGLE_CLOUD_PROJECT = 'demo-bumpwarden'
 npm run dev
 ```
 
 Other commands:
 
 ```sh
-npm run verify:ship   # typecheck, the full test suite, whole-repo lint, and the gate chain
+npm run verify:ship   # types, tests, lint, format, the gate chain, and the build, in that order
 npm test              # the suite on its own
+npm run test:coverage # the suite with a coverage report
+npm run mutate        # mutation testing over the deterministic core
+npm run dryrun -- owner/repo   # the whole pipeline over a real repository, writing nothing
 npm run smoke:brief   # one real Gemini call over material checked into the script
 npm run demo:check    # score the demo repository against live registry data
 npm run docs:diagram  # regenerate docs/architecture.svg from the About page's own component
 ```
+
+`npm run dryrun` is the honest way to try bumpwarden on a project before granting a token that can
+push: it fetches, scores and explains every pending bump and records what it would have opened,
+without touching the repository. It reads `GITHUB_TOKEN` for the API rate limit, `GEMINI_API_KEY`
+for the briefs, and `GOOGLE_CLOUD_PROJECT` when the result should land in Firestore rather than in
+memory.
 
 ## Deploy it to Cloud Run
 
