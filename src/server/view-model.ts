@@ -152,9 +152,12 @@ const LINKABLE = new Set(['http:', 'https:']);
 
 export function safeHref(value: string | null | undefined): string | null {
   if (!value) return null;
-  // A single leading slash is a path this repository built. Two is a protocol-relative url, which
-  // is somebody else's host wearing the same shape.
-  if (value.startsWith('/')) return value.startsWith('//') ? null : value;
+  // A single leading slash is a path this repository built. `//host` is a protocol-relative url,
+  // and `/\host` is the same thing spelled the way a browser normalises rather than the way a
+  // reader parses: both are somebody else's host wearing one of our paths.
+  if (value.startsWith('/')) {
+    return value[1] === '/' || value[1] === '\\' ? null : value;
+  }
 
   try {
     return LINKABLE.has(new URL(value).protocol) ? value : null;

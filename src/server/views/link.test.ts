@@ -15,6 +15,10 @@ describe('what may become a link', () => {
   it('keeps a path this site built, and refuses one pointing at another host', () => {
     expect(safeHref('/projects/voyagi%2Fdemo')).toBe('/projects/voyagi%2Fdemo');
     expect(safeHref('//evil.example.net/projects')).toBeNull();
+    // A browser normalises the backslash to a slash before it resolves the url, so this is the
+    // protocol-relative form again, spelled so that reading it does not look like one.
+    expect(safeHref('/\\evil.example.net/projects')).toBeNull();
+    expect(safeHref('/\\\\evil.example.net')).toBeNull();
   });
 
   /**

@@ -236,6 +236,20 @@ describe('one run over one repository', () => {
     expect(claimed).toBe(true);
   });
 
+  /**
+   * A rejection inside the release would replace whatever the run returned, so a finished run
+   * would reach the endpoint as a store error and be answered 500. The lease expires by itself.
+   */
+  it('still returns the run when handing the lease back fails', async () => {
+    const context = await harness();
+    context.deps.store.releaseRun = async () => {
+      throw new Error('firestore is unreachable');
+    };
+
+    const run = await executeRun(context.deps, { trigger: 'manual' });
+    expect(run.status).toBe('finished');
+  });
+
   it('scores the bump, writes the brief and opens the action', async () => {
     const context = await harness();
     const run = await executeRun(context.deps, { trigger: 'scheduled' });

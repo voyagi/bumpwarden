@@ -383,7 +383,12 @@ export async function executeRun(deps: RunDependencies, options: RunOptions): Pr
   try {
     return await runClaimed(deps, options, id, startedAt);
   } finally {
-    await deps.store.releaseRun(RUN_CLAIM_KEY, holder);
+    // A rejection here would replace whatever the run returned or threw, turning a finished run
+    // into a store error the caller answers 500 to. The lease expires on its own, so failing to
+    // hand it back early is a delay rather than a fault.
+    await deps.store.releaseRun(RUN_CLAIM_KEY, holder).catch((error: unknown) => {
+      (deps.logger ?? silentLogger).error('lease not released', { runId: id, error });
+    });
   }
 }
 
