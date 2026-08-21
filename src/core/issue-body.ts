@@ -65,7 +65,7 @@ function verdictLine(input: BodyInput): string {
 function scoreTable(score: Score): string {
   const rows = score.factors
     .filter((factor) => factor.points > 0)
-    .map((factor) => `| ${factor.label} | ${factor.points} | ${factor.evidence} |`);
+    .map((factor) => `| ${factor.label} | ${factor.points} | ${cell(factor.evidence)} |`);
 
   if (rows.length === 0) {
     return ['### How this was scored', '', 'No factor scored above zero.'].join('\n');
@@ -82,20 +82,80 @@ function scoreTable(score: Score): string {
 }
 
 /**
+ * A handle or an issue number inside a code span stays text: GitHub's mention filter skips `code`,
+ * `pre`, `a`, `style` and `script` parents. Without this, release notes a stranger wrote decide who
+ * an issue signed by this agent notifies, and which unrelated issue in the watched repository
+ * collects a cross-reference. Both forms keep their preceding character out of the handle so a
+ * scoped version (`pkg@2.0.0`), a path (`/@scope`) and an anchor (`notes#12`) are left alone.
+ */
+const MENTION =
+  /(^|[^\w`/.-])@([A-Za-z\d](?:-?[A-Za-z\d]){0,38}(?:\/[A-Za-z\d_-](?:[A-Za-z\d._-]{0,58}[A-Za-z\d_-])?)?)/g;
+const ISSUE_REF = /(^|[^\w`&#])#(\d{1,7})\b/g;
+
+/**
+ * Everything the model wrote about someone else's release notes passes through here. Angle brackets
+ * go first: GitHub keeps a subset of raw HTML in a body, so `<h1>` from a changelog would otherwise
+ * render as a heading of this agent's, and `>` at the start of a line would open a blockquote.
+ */
+function asText(text: string): string {
+  return text
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(MENTION, (_match, before: string, handle: string) => `${before}\`@${handle}\``)
+    .replace(ISSUE_REF, (_match, before: string, digits: string) => `${before}\`#${digits}\``);
+}
+
+/**
  * The model writes these fields about release notes a package author wrote, so the author can aim
  * them. A newline is all it takes to leave the heading, the list item or the blockquote the body
- * puts them in and write markdown of their own: a fabricated verdict line, a heading that reads
- * like bumpwarden's, an @mention that notifies a stranger. Nothing here can execute on GitHub, but
- * an issue this agent signs has to say only what this agent decided.
+ * puts them in and write markdown of their own: a fabricated verdict line, or a heading that reads
+ * like bumpwarden's. Nothing here can execute on GitHub, but an issue this agent signs has to say
+ * only what this agent decided.
  */
 function oneLine(text: string): string {
-  return text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+  return asText(text.replace(/\s*[\r\n]+\s*/g, ' ').trim());
+}
+
+/** A code span ends at the next backtick, and neither a path nor a symbol legitimately holds one. */
+function code(text: string): string {
+  return oneLine(text).replace(/`/g, '');
+}
+
+/**
+ * A line that would open a block of its own: an ATX heading, a fence, a thematic break, or the
+ * underline that turns the paragraph above it into a heading. `--` is enough for the last of those,
+ * which is why the dash and equals cases are not folded into the three-character rule.
+ */
+const OPENS_A_BLOCK =
+  /^(\s*)(#{1,6}|`{3,}|~{3,}|-+[ \t]*$|=+[ \t]*$|(?:\*[ \t]*){3,}$|(?:_[ \t]*){3,}$)/;
+
+/**
+ * `whatChanged` is the one field kept multi-line, because it is the only place the brief is allowed
+ * more than a sentence. Paragraphs and lists are what it is for and survive; a line that would open
+ * a block keeps its characters as text instead.
+ */
+function multiLine(text: string): string {
+  return asText(text.replace(/\r\n/g, '\n'))
+    .split('\n')
+    .map((line) =>
+      line.replace(
+        OPENS_A_BLOCK,
+        (_match, indent: string, opener: string) => `${indent}\\${opener}`,
+      ),
+    )
+    .join('\n')
+    .trim();
+}
+
+/** A pipe ends a table cell, and a factor's evidence can carry a path or a quote from upstream. */
+function cell(text: string): string {
+  return oneLine(text).replace(/\|/g, '\\|');
 }
 
 function claimLine(claim: VerifiedClaim): string {
   const label = claim.verified ? '' : ' _(unverified: no matching call site was found)_';
   return [
-    `- \`${claim.path}:${claim.line}\` uses \`${claim.symbol}\`${label}`,
+    `- \`${code(claim.path)}:${claim.line}\` uses \`${code(claim.symbol)}\`${label}`,
     `  > ${oneLine(claim.quote)}`,
     `  Source: ${oneLine(claim.source)}`,
   ].join('\n');
@@ -112,7 +172,7 @@ function briefSection(brief: BriefRecord): string {
   }
 
   const content = brief.content;
-  const parts = [`### ${oneLine(content.headline)}`, '', content.whatChanged];
+  const parts = [`### ${oneLine(content.headline)}`, '', multiLine(content.whatChanged)];
 
   if (content.breakingChanges.length > 0) {
     parts.push(

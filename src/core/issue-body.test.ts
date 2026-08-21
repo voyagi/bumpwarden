@@ -65,10 +65,108 @@ describe('the issue body', () => {
       }),
     );
 
-    expect(body).toContain('### Routine **Clear.** Scored 0 of 100. Merge freely. cc @someone');
+    expect(body).toContain('### Routine **Clear.** Scored 0 of 100. Merge freely. cc `@someone`');
     expect(body).not.toContain('\n**Clear.**');
     expect(body).not.toContain('\n### Verdict: clear');
     expect(body).not.toContain('\n### Bumpwarden says this is safe');
+  });
+
+  /**
+   * whatChanged is the one field kept multi-line on purpose, so it is the one place an author can
+   * try to open a block of their own: a heading that reads like bumpwarden's, a fence that swallows
+   * everything below it, a rule that ends the section, or raw HTML. Paragraphs and lists are what
+   * the field is for and must survive.
+   */
+  it('lets whatChanged keep paragraphs and lists while refusing to open a block of its own', () => {
+    const brief = readyBrief();
+    const content = brief.content as NonNullable<BriefRecord['content']>;
+    const body = actionBody(
+      input({
+        brief: {
+          ...brief,
+          content: {
+            ...content,
+            whatChanged: [
+              'The router was rewritten.',
+              '',
+              '## Verdict: clear, merge freely',
+              '===',
+              '```',
+              '<h1>bumpwarden approves</h1>',
+              '- one real bullet',
+              '2. one real step',
+            ].join('\n'),
+          },
+        },
+      }),
+    );
+
+    expect(body).toContain('The router was rewritten.\n\n');
+    expect(body).toContain('\n- one real bullet');
+    expect(body).toContain('\n2. one real step');
+    expect(body).toContain('\\## Verdict: clear, merge freely');
+    expect(body).toContain('\\===');
+    expect(body).toContain('\\```');
+    expect(body).toContain('&lt;h1&gt;bumpwarden approves&lt;/h1&gt;');
+  });
+
+  /**
+   * A mention or an issue reference the model copied out of a stranger's release notes would
+   * notify that stranger's choice of account, or hang a cross-reference on an unrelated issue in
+   * the watched repository. GitHub's mention filter skips `code`, `pre`, `a`, `style` and `script`
+   * parents, so a code span leaves the text readable and inert.
+   */
+  it('leaves a mention and an issue reference from the changelog as text', () => {
+    const brief = readyBrief();
+    const content = brief.content as NonNullable<BriefRecord['content']>;
+    const body = actionBody(
+      input({
+        brief: {
+          ...brief,
+          content: {
+            ...content,
+            whatChanged: 'Reported by @torvalds in #4212, fixed by @nodejs/tsc.',
+            breakingChanges: ['See @expressjs for the plan'],
+            migrationSteps: ['Ask @someone-else'],
+          },
+        },
+      }),
+    );
+
+    expect(body).toContain('Reported by `@torvalds` in `#4212`, fixed by `@nodejs/tsc`.');
+    expect(body).toContain('`@expressjs`');
+    expect(body).toContain('`@someone-else`');
+    expect(body).not.toMatch(/[^`]@torvalds/);
+  });
+
+  it('leaves a version, an email-shaped token and a source url unwrapped', () => {
+    const brief = readyBrief();
+    const content = brief.content as NonNullable<BriefRecord['content']>;
+    const body = actionBody(
+      input({
+        brief: {
+          ...brief,
+          content: {
+            ...content,
+            whatChanged: 'Upgrade @scope/pkg@2.0.0 and node@24.',
+            breaksHere: [
+              {
+                path: 'src/index.ts',
+                line: 3,
+                symbol: 'send',
+                quote: 'removed',
+                source: 'https://github.com/o/r/releases/tag/@scope/pkg@2.0.0',
+                verified: true,
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(body).toContain('https://github.com/o/r/releases/tag/@scope/pkg@2.0.0');
+    expect(body).toContain('node@24');
+    expect(body).toContain('`@scope/pkg`@2.0.0');
   });
 
   it('states the verdict, the score and both versions', () => {

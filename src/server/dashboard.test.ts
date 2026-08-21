@@ -227,6 +227,30 @@ describe('the bump detail', () => {
     expect(body).toContain('evil.example.net');
   });
 
+  /**
+   * whatChanged is the one field the brief lets run to several paragraphs, and HTML eats the blank
+   * line between them, so two paragraphs arrive as one sentence unless the page splits them.
+   */
+  it('keeps the paragraphs of the explanation apart', async () => {
+    const wordy = bumpRecord({
+      key: 'voyagi/demo-app#glob@11.0.0',
+      repositoryId: DEMO.id,
+      dependency: 'glob',
+      candidateVersion: '11.0.0',
+      brief: readyBrief({
+        content: {
+          ...(readyBrief().content as BriefContent),
+          whatChanged: 'The walker is async now.\n\nThe sync export was removed.',
+        },
+      }),
+    });
+    await store.saveBump(wordy);
+
+    const body = await text(store, bumpPath(DEMO.id, wordy.key));
+    expect(body).toContain('<p>The walker is async now.</p>');
+    expect(body).toContain('<p>The sync export was removed.</p>');
+  });
+
   it('says the brief is unavailable rather than inventing one', async () => {
     const green = greenBump();
     const body = await text(store, bumpPath(DEMO.id, green.key));

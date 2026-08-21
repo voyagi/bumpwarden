@@ -43,6 +43,25 @@ function Claims(props: { brief: BriefRecord }): JSX.Element | null {
   );
 }
 
+/**
+ * `whatChanged` is the one brief field allowed more than a sentence, and HTML collapses the blank
+ * line that separates two paragraphs, so without this the explanation arrives as one wall.
+ */
+function Explanation(props: { text: string }): JSX.Element {
+  const paragraphs = props.text
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  return (
+    <>
+      {paragraphs.map((part) => (
+        <p key={part}>{part}</p>
+      ))}
+    </>
+  );
+}
+
 function Provenance(props: { brief: BriefRecord }): JSX.Element {
   const { brief } = props;
   const content = brief.content;
@@ -86,7 +105,7 @@ function Brief(props: { brief: BriefRecord }): JSX.Element {
     <div class="card">
       <p class="kick">Machine explanation, not verdict</p>
       <h3>{content.headline}</h3>
-      <p>{content.whatChanged}</p>
+      <Explanation text={content.whatChanged} />
 
       {content.breakingChanges.length > 0 ? (
         <ul class="steps">
