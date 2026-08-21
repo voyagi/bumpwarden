@@ -6,7 +6,8 @@ import { z } from 'zod';
 export const env = createEnv({
   server: {
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-    // Cloud Run routes traffic into the container on all interfaces; local runs stay on loopback.
+    // `all` means every interface, which is what Cloud Run requires of the container it runs. Any
+    // other value is used as written, and local runs stay on loopback.
     HOST: z.string().min(1).default('127.0.0.1'),
     PORT: z.coerce.number().int().min(1).max(65535).default(8080),
     GEMINI_API_KEY: z.string().min(1).optional(),

@@ -5,10 +5,12 @@ import { env } from '../env.js';
 import { FirestoreStore } from '../io/firestore-store.js';
 import { RepositoryActor, octokitRequest } from '../io/github-actor.js';
 import { RunFetcher } from '../io/http.js';
+import { log } from '../io/log.js';
 import { MemoryStore } from '../io/memory-store.js';
 import type { BumpwardenStore } from '../io/store.js';
 import { executeRun, type RunDependencies } from '../orchestrator/run.js';
 import { createApp } from './app.js';
+import { bindHostname } from './bind.js';
 import { googleTokenVerifier } from './oidc.js';
 
 // The entry point is the only place that reads the environment, so importing the app in a test or
@@ -37,6 +39,7 @@ const dependencies: RunDependencies = {
   engine: env.GEMINI_API_KEY ? createAdkBriefEngine({ apiKey: env.GEMINI_API_KEY }) : null,
   githubToken: env.GITHUB_TOKEN ?? null,
   dashboardBaseUrl: env.SERVICE_BASE_URL ?? null,
+  logger: log,
 };
 
 /**
@@ -73,6 +76,13 @@ const app = createApp({
 
 await seedDemoRepository();
 
-serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (info) => {
-  console.log(`bumpwarden listening on http://${info.address}:${info.port}`);
+serve({ fetch: app.fetch, hostname: bindHostname(env.HOST), port: env.PORT }, (info) => {
+  log.info('listening', {
+    port: info.port,
+    host: env.HOST,
+    store: env.GOOGLE_CLOUD_PROJECT ? 'firestore' : 'memory',
+    brief: env.GEMINI_API_KEY ? 'gemini' : 'disabled',
+    github: env.GITHUB_TOKEN ? 'authenticated' : 'read-only',
+    runEndpoint: env.RUN_INVOKER_EMAIL && env.SERVICE_BASE_URL ? 'gated' : 'closed',
+  });
 });
