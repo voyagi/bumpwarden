@@ -81,12 +81,23 @@ function scoreTable(score: Score): string {
   ].join('\n');
 }
 
+/**
+ * The model writes these fields about release notes a package author wrote, so the author can aim
+ * them. A newline is all it takes to leave the heading, the list item or the blockquote the body
+ * puts them in and write markdown of their own: a fabricated verdict line, a heading that reads
+ * like bumpwarden's, an @mention that notifies a stranger. Nothing here can execute on GitHub, but
+ * an issue this agent signs has to say only what this agent decided.
+ */
+function oneLine(text: string): string {
+  return text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+}
+
 function claimLine(claim: VerifiedClaim): string {
   const label = claim.verified ? '' : ' _(unverified: no matching call site was found)_';
   return [
     `- \`${claim.path}:${claim.line}\` uses \`${claim.symbol}\`${label}`,
-    `  > ${claim.quote}`,
-    `  Source: ${claim.source}`,
+    `  > ${oneLine(claim.quote)}`,
+    `  Source: ${oneLine(claim.source)}`,
   ].join('\n');
 }
 
@@ -101,10 +112,14 @@ function briefSection(brief: BriefRecord): string {
   }
 
   const content = brief.content;
-  const parts = [`### ${content.headline}`, '', content.whatChanged];
+  const parts = [`### ${oneLine(content.headline)}`, '', content.whatChanged];
 
   if (content.breakingChanges.length > 0) {
-    parts.push('', '**Breaking changes**', ...content.breakingChanges.map((line) => `- ${line}`));
+    parts.push(
+      '',
+      '**Breaking changes**',
+      ...content.breakingChanges.map((line) => `- ${oneLine(line)}`),
+    );
   }
   if (content.breaksHere.length > 0) {
     parts.push('', '**What breaks here**', ...content.breaksHere.map(claimLine));
@@ -126,7 +141,9 @@ function migrationSection(brief: BriefRecord, checklist: boolean): string {
   const steps = brief.content?.migrationSteps ?? [];
   if (steps.length === 0) return '';
 
-  const lines = steps.map((step, index) => (checklist ? `- [ ] ${step}` : `${index + 1}. ${step}`));
+  const lines = steps.map((step, index) =>
+    checklist ? `- [ ] ${oneLine(step)}` : `${index + 1}. ${oneLine(step)}`,
+  );
   return ['### Migration', '', ...lines].join('\n');
 }
 

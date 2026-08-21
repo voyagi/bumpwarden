@@ -58,6 +58,16 @@ function acceptable(candidate: string): boolean {
 }
 
 /**
+ * How many distinct names one release may contribute. Release notes are written by whoever
+ * published the package, and every name here becomes a regular expression run against every line
+ * of every source file read from the watched repository. A changelog carrying a few thousand
+ * backticked identifiers, which is a legal GitHub release body, would turn that product into tens
+ * of millions of tests on the one thread this service also answers requests on. No real changelog
+ * names anywhere near this many.
+ */
+const MAX_SYMBOLS = 120;
+
+/**
  * Names the release evidence says changed. Deliberately mechanical: code spans and a short list of
  * removal verbs, nothing inferred. The model refines the wording of a brief later, but this list is
  * what the score is computed from, so it has to be reproducible from the text alone.
@@ -67,12 +77,14 @@ export function changedSymbols(release: ReleaseEvidence): string[] {
   const found = new Set<string>();
 
   for (const match of text.matchAll(CODE_SPAN)) {
+    if (found.size >= MAX_SYMBOLS) return [...found];
     // Release notes name a method with its call shape, `req.param(name)`. The argument list is
     // documentation, not part of the symbol, so it is dropped before the identifier check.
     const cleaned = (match[1] ?? '').trim().replace(/\([^)]*\)$/, '');
     if (acceptable(cleaned)) found.add(cleaned);
   }
   for (const match of text.matchAll(REMOVAL_SUBJECT)) {
+    if (found.size >= MAX_SYMBOLS) break;
     const name = match[1] ?? '';
     if (acceptable(name)) found.add(name);
   }

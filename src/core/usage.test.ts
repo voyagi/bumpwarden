@@ -83,6 +83,25 @@ describe('changedSymbols', () => {
       'parseQuery',
     );
   });
+
+  /**
+   * Whoever publishes a package writes its release notes, and every name taken out of them becomes
+   * a pattern run against every line of the watched repository's source. Unbounded, a legal GitHub
+   * release body is enough to hold this service's one thread for minutes.
+   */
+  it('stops reading names long before a hostile changelog can make work of them', () => {
+    const flood = Array.from({ length: 5_000 }, (_, index) => `\`sym${index}x\``).join(' ');
+    const symbols = changedSymbols(spanNotes(flood));
+
+    expect(symbols.length).toBeLessThanOrEqual(120);
+    expect(symbols.length).toBeGreaterThan(100);
+    expect(symbols[0]).toBe('sym0x');
+  });
+
+  it('reads an ordinary changelog whole, so the cap costs a real project nothing', () => {
+    const ordinary = Array.from({ length: 40 }, (_, index) => `\`api${index}x\``).join(', ');
+    expect(changedSymbols(spanNotes(ordinary))).toHaveLength(40);
+  });
 });
 
 /**

@@ -53,11 +53,22 @@ interface ActionShape {
   detail: string;
 }
 
+/**
+ * The exact logins the two bots post under, not a substring of them. Anyone may register an
+ * account containing the word "renovate" and open a pull request on a public repository, and a
+ * substring match would let them redirect bumpwarden's brief onto a pull request they control
+ * while the issue that should have been opened never is.
+ */
+const BOT_LOGINS = new Map<string, BotPullRequest['bot']>([
+  ['dependabot[bot]', 'dependabot'],
+  ['dependabot-preview[bot]', 'dependabot'],
+  ['renovate[bot]', 'renovate'],
+  ['renovate-bot', 'renovate'],
+  ['mend-for-github-com[bot]', 'renovate'],
+]);
+
 function botOf(login: string): BotPullRequest['bot'] | null {
-  const name = login.toLowerCase();
-  if (name.includes('dependabot')) return 'dependabot';
-  if (name.includes('renovate')) return 'renovate';
-  return null;
+  return BOT_LOGINS.get(login.toLowerCase()) ?? null;
 }
 
 /**

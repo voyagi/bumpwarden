@@ -284,6 +284,35 @@ describe('finding a bot pull request', () => {
       findBotPullRequest([pull({ title: 'Bump hono to 4.14.0' })], 'express', '5.0.0'),
     ).toBeNull();
   });
+
+  /**
+   * The watched repository is public, so anyone can open a pull request on it under any account
+   * name they registered. Matching the login as a substring handed them the agent: bumpwarden
+   * would comment its brief onto their pull request and open no issue of its own, which both
+   * lends the brief to a stranger's change and loses the record the policy promises.
+   */
+  const impostors = [
+    'notdependabot',
+    'dependabot-evil',
+    'renovate-impostor',
+    'my-renovate[bot]',
+    'RENOVATEBOT-x',
+  ];
+
+  it.each(impostors)('does not take %s for the bot whose name it borrowed', (author) => {
+    expect(
+      findBotPullRequest([pull({ author, title: 'Bump express to 5.0.0' })], 'express', '5.0.0'),
+    ).toBeNull();
+  });
+
+  it('still recognises the real logins, whatever case GitHub returns them in', () => {
+    for (const author of ['dependabot[bot]', 'Dependabot[bot]', 'renovate[bot]', 'renovate-bot']) {
+      expect(
+        findBotPullRequest([pull({ author, title: 'Bump express to 5.0.0' })], 'express', '5.0.0'),
+        author,
+      ).not.toBeNull();
+    }
+  });
 });
 
 describe('when bumpwarden cannot write', () => {
