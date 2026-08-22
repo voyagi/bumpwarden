@@ -10,9 +10,11 @@ import { compareVersions, fetchReleaseNotes, fetchTextFile, type RepoRef } from 
 import type { RunFetcher } from '../io/http.js';
 import {
   fetchPackument,
+  fetchPublishTime,
   githubRepoFrom,
   isVersionDeprecated,
   resolveCandidate,
+  type Candidate,
 } from '../io/npm.js';
 import {
   LOCKFILES,
@@ -126,6 +128,22 @@ async function severitiesFor(
   return severities;
 }
 
+/**
+ * deps.dev first, because it answers in a few KB. The registry's whole packument is the fallback
+ * and costs a download the size of the package's history, so it is read only when the cheap source
+ * had no time to give, which keeps the fresh-release penalty alive through a deps.dev outage.
+ */
+async function publishTimeFor(
+  fetcher: RunFetcher,
+  packageName: string,
+  candidate: Candidate,
+  fromDepsDev: string | null,
+): Promise<string> {
+  if (fromDepsDev) return fromDepsDev;
+  if (candidate.publishedAt) return candidate.publishedAt;
+  return (await fetchPublishTime(fetcher, packageName, candidate.version)) ?? '';
+}
+
 async function bumpFor(
   fetcher: RunFetcher,
   installed: InstalledDependency,
@@ -150,6 +168,12 @@ async function bumpFor(
       why: candidateFacts.detail,
     });
   }
+  const candidatePublishedAt = await publishTimeFor(
+    fetcher,
+    installed.name,
+    candidate,
+    candidateFacts.ok ? candidateFacts.value.publishedAt : null,
+  );
 
   const release = await collectReleaseEvidence(
     fetcher,
@@ -167,8 +191,7 @@ async function bumpFor(
     dependency: installed.name,
     currentVersion: installed.version,
     candidateVersion: candidate.version,
-    candidatePublishedAt:
-      (candidateFacts.ok ? candidateFacts.value.publishedAt : null) ?? candidate.publishedAt ?? '',
+    candidatePublishedAt,
     // Two sources for the same fact on purpose: the registry already carries it, so a deps.dev
     // outage must not quietly drop the ten points an installed deprecated version is worth.
     currentDeprecated:

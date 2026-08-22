@@ -52,10 +52,13 @@ const store: BumpwardenStore = projectId
 const apiKey = process.env.GEMINI_API_KEY;
 const engine = apiKey ? createAdkBriefEngine({ apiKey }) : null;
 
+// Kept so the summary can say what the run pulled over the network, not only how long it took.
+const network: { fetcher: RunFetcher | null } = { fetcher: null };
+
 const dependencies: RunDependencies = {
   store,
   now: () => new Date(),
-  createFetcher: () => new RunFetcher(),
+  createFetcher: () => (network.fetcher = new RunFetcher()),
   // The one difference from a deployed run. Withholding the actor is what makes this a dry run:
   // act.ts records what it would have done and touches nothing.
   createActor: () => null,
@@ -113,6 +116,12 @@ console.log(
     `${run.counts.red} red, ${run.counts.amber} amber, ${run.counts.green} green, ` +
     `${run.actionsTaken} actions taken (a dry run takes none).`,
 );
+
+const reads = network.fetcher?.stats();
+if (reads) {
+  const megabytes = (reads.bytes / 1_048_576).toFixed(1);
+  console.log(`${reads.calls} network calls, ${reads.cacheHits} cached, ${megabytes} MB read.`);
+}
 
 // A paced run is slower on purpose, and a reader who is not told that reads it as a slow run.
 const paced = engine?.pacer.waited() ?? 0;

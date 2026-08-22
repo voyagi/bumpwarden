@@ -51,8 +51,10 @@ Glance back at the logs tab once, mid-sentence, to show `bump handled` lines arr
 
 On screen: back to the dashboard, the run has finished, the queue has filled.
 
-Say: seven bumps, sorted riskiest first. Two red, three amber, two green, and the same numbers on
-the run record. Point at `glob 7 to 13` at the top and `cookie-parser` at the bottom.
+Say: seven bumps, sorted riskiest first. Three red, two amber, two green, and the same numbers on
+the run record. Point at `glob 7 to 13` at the top and `cookie-parser` at the bottom. Read the
+split off the screen rather than from this page: a dependency that publishes a new version before
+the recording can move a row across a band.
 
 ### 5. One bump, in full (2:20 to 3:10)
 

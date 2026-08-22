@@ -102,13 +102,13 @@ export const PUBLISHED_RUBRIC: PublishedFactor[] = [
   {
     key: 'ageUnder7Days',
     description: `Candidate published less than ${AGE_DAYS.fresh} days ago`,
-    source: 'npm registry time',
+    source: 'deps.dev, npm registry time',
     points: POINTS.ageUnder7Days,
   },
   {
     key: 'age7To14Days',
     description: `Candidate published ${AGE_DAYS.fresh} to ${AGE_DAYS.settling} days ago`,
-    source: 'npm registry time',
+    source: 'deps.dev, npm registry time',
     points: POINTS.age7To14Days,
   },
   {

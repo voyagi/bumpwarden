@@ -32,7 +32,19 @@ describe('RunFetcher', () => {
 
     expect(second).toEqual({ ok: true, value: 'hello', fromCache: true });
     expect(urls).toHaveLength(1);
-    expect(fetcher.stats()).toMatchObject({ calls: 1, cacheHits: 1 });
+    expect(fetcher.stats()).toMatchObject({ calls: 1, cacheHits: 1, bytes: 5 });
+  });
+
+  it('counts the bytes that crossed the network, a refused body included', async () => {
+    const { impl } = scripted([response(200, 'x'.repeat(3_000)), response(200, 'hello')]);
+    const fetcher = new RunFetcher({ fetchImpl: impl, sleep: noSleep, maxBytes: 1_000 });
+
+    const refused = await fetcher.getText('https://example.test/big');
+    await fetcher.getText('https://example.test/small');
+
+    expect(refused).toMatchObject({ ok: false, reason: 'too-large' });
+    expect(fetcher.stats().bytes).toBeGreaterThan(1_000);
+    expect(fetcher.stats().bytes).toBeLessThanOrEqual(3_005);
   });
 
   it('caches a failure too, so a dead source is not paid for twice', async () => {

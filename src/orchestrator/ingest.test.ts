@@ -51,22 +51,48 @@ function contents(value: unknown) {
   return json({ content: base64(value), encoding: 'base64' });
 }
 
-function happyRoutes(): Route[] {
+const PACKUMENT = 'https://registry.npmjs.org/express';
+
+/**
+ * The registry is served as the documents the client reads: `latest` and the installed version
+ * on their own, and the whole packument only under its bare name. A route on
+ * `urlContains('registry.npmjs.org/express')` would answer `/express/latest` with a packument,
+ * which the client calls malformed, and the test would be exercising nothing it claims to.
+ */
+function registryRoutes(): Route[] {
   return [
-    { match: urlContains('/contents/package.json'), step: contents(MANIFEST) },
-    { match: urlContains('/contents/package-lock.json'), step: contents(LOCK) },
     {
-      match: urlContains('registry.npmjs.org/express'),
+      match: urlContains(`${PACKUMENT}/latest`),
+      step: json({
+        version: '5.2.1',
+        engines: { node: '>= 18' },
+        repository: { url: 'git+https://github.com/expressjs/express.git' },
+      }),
+    },
+    {
+      match: urlContains(`${PACKUMENT}/4.18.2`),
+      step: json({ version: '4.18.2', engines: { node: '>= 0.10.0' } }),
+    },
+    {
+      match: (url) => url.endsWith(PACKUMENT),
       step: json({
         'dist-tags': { latest: '5.2.1' },
         versions: {
           '4.18.2': { engines: { node: '>= 0.10.0' } },
           '5.2.1': { engines: { node: '>= 18' } },
         },
-        time: { '4.18.2': '2022-10-08T20:14:32Z', '5.2.1': '2025-12-01T00:00:00Z' },
+        time: { '4.18.2': '2022-10-08T20:14:32Z', '5.2.1': '2026-08-20T00:00:00Z' },
         repository: { url: 'git+https://github.com/expressjs/express.git' },
       }),
     },
+  ];
+}
+
+function happyRoutes(): Route[] {
+  return [
+    { match: urlContains('/contents/package.json'), step: contents(MANIFEST) },
+    { match: urlContains('/contents/package-lock.json'), step: contents(LOCK) },
+    ...registryRoutes(),
     {
       match: urlContains('/packages/express/versions/5.2.1'),
       step: json({ publishedAt: '2025-12-01T00:00:00Z', isDeprecated: false, advisoryKeys: [] }),
@@ -177,14 +203,20 @@ describe('manifest and lockfile parsing', () => {
 });
 
 describe('ingestRepository', () => {
-  it('assembles a bump whose score matches the published rubric', async () => {
-    const { fetcher } = fetcherWith(happyRoutes());
+  /**
+   * 62 is the number this bump scored when the whole packument was the read, so the two version
+   * documents that replaced it must reproduce it exactly, and the packument itself must never be
+   * requested: `typescript` is 16 MB of it and a 39-dependency repository pulled 197 MB per run.
+   */
+  it('assembles a bump whose score matches the published rubric without downloading a packument', async () => {
+    const { fetcher, urls } = fetcherWith(happyRoutes());
 
     const result = await ingestRepository(fetcher, TARGET, { sourceFiles: [ROUTE_FILE] });
 
     expect(result.lockfile).toBe('npm');
     expect(result.repoEngines).toBe('>=18');
     expect(result.bumps).toHaveLength(1);
+    expect(result.missing).toEqual([]);
 
     const bump = result.bumps[0];
     expect(bump).toMatchObject({
@@ -194,13 +226,64 @@ describe('ingestRepository', () => {
       candidatePublishedAt: '2025-12-01T00:00:00Z',
       candidateEngines: '>= 18',
       repoEngines: '>=18',
+      peerDependenciesChanged: false,
       usage: 'changed-symbol',
     });
     expect(bump?.usageSites.map((site) => site.symbol)).toContain('res.sendfile');
+    expect(bump?.release.notes).toBe(EXPRESS_NOTES);
 
     const score = scoreBump(bump!, NOW);
     expect(score.total).toBe(62);
     expect(score.band).toBe('red');
+
+    expect(urls).toContain(`${PACKUMENT}/latest`);
+    expect(urls).toContain(`${PACKUMENT}/4.18.2`);
+    expect(urls).not.toContain(PACKUMENT);
+  });
+
+  /**
+   * The fixture's two sources disagree about the date on purpose: that is how the test can tell
+   * which one answered. deps.dev, asked first, names no time here, so the registry's own record is
+   * read, and it is recent enough to carry the fresh-release points the score would otherwise lose.
+   */
+  it('reads the publish time out of the packument only when deps.dev has none', async () => {
+    const routes = happyRoutes().filter(
+      (route) => !route.match('/packages/express/versions/5.2.1'),
+    );
+    routes.push({
+      match: urlContains('/packages/express/versions/5.2.1'),
+      step: json({ isDeprecated: false, advisoryKeys: [] }),
+    });
+    const { fetcher, urls } = fetcherWith(routes);
+
+    const result = await ingestRepository(fetcher, TARGET, { sourceFiles: [ROUTE_FILE] });
+
+    expect(result.bumps[0]?.candidatePublishedAt).toBe('2026-08-20T00:00:00Z');
+    expect(scoreBump(result.bumps[0]!, NOW).total).toBe(74);
+    expect(urls.filter((url) => url === PACKUMENT)).toHaveLength(1);
+  });
+
+  it('scores the publish time as unknown when deps.dev has none and the packument is over the cap', async () => {
+    const routes = happyRoutes().filter(
+      (route) => !route.match('/packages/express/versions/5.2.1') && !route.match(PACKUMENT),
+    );
+    routes.push(
+      {
+        match: urlContains('/packages/express/versions/5.2.1'),
+        step: json({ isDeprecated: false, advisoryKeys: [] }),
+      },
+      { match: (url) => url.endsWith(PACKUMENT), step: text('x'.repeat(4_000)) },
+    );
+    const { fetcher } = fetcherWith(routes, 450, 1_000);
+
+    const result = await ingestRepository(fetcher, TARGET, { sourceFiles: [ROUTE_FILE] });
+
+    expect(result.bumps[0]?.candidatePublishedAt).toBe('');
+    const score = scoreBump(result.bumps[0]!, NOW);
+    expect(score.total).toBe(62);
+    expect(score.factors.find((factor) => factor.id === 'age')?.evidence).toBe(
+      'publish time unknown',
+    );
   });
 
   it('records a missing changelog instead of failing the run', async () => {
@@ -214,64 +297,40 @@ describe('ingestRepository', () => {
     expect(result.missing.map((m) => m.what)).toContain('express release notes');
   });
 
-  /**
-   * `prisma` and `@prisma/client` have packuments of 44 and 68 MB, so the cap that protects the
-   * container refused both and two dependencies of a real project got no score at all. The same
-   * facts come out of two version documents of a few KB each, and the score must not move.
-   */
-  it('scores a dependency whose packument is over the cap the same from its version documents', async () => {
-    const routes = happyRoutes().filter((route) => !route.match('registry.npmjs.org/express'));
-    routes.unshift(
-      {
-        match: urlContains('registry.npmjs.org/express/latest'),
-        step: json({
-          version: '5.2.1',
-          engines: { node: '>= 18' },
-          repository: { url: 'git+https://github.com/expressjs/express.git' },
-        }),
+  it('records the versions above an installed version that is ahead of latest as unread when the list is over the cap', async () => {
+    const routes = happyRoutes().filter((route) => !route.match(PACKUMENT));
+    routes.push({ match: (url) => url.endsWith(PACKUMENT), step: text('x'.repeat(4_000)) });
+    const ahead = {
+      lockfileVersion: 3,
+      packages: {
+        '': { name: 'bumpwarden-demo-app' },
+        'node_modules/express': { version: '6.0.0' },
       },
-      {
-        match: urlContains('registry.npmjs.org/express/4.18.2'),
-        step: json({ version: '4.18.2', engines: { node: '>= 0.10.0' } }),
-      },
-      { match: (url) => url.endsWith('registry.npmjs.org/express'), step: text('x'.repeat(4_000)) },
-    );
-    const { fetcher } = fetcherWith(routes, 300, 1_000);
+    };
+    routes[routes.findIndex((route) => route.match('/contents/package-lock.json'))] = {
+      match: urlContains('/contents/package-lock.json'),
+      step: contents(ahead),
+    };
+    const { fetcher, urls } = fetcherWith(routes, 450, 1_000);
 
     const result = await ingestRepository(fetcher, TARGET, { sourceFiles: [ROUTE_FILE] });
 
-    expect(result.bumps).toHaveLength(1);
-    expect(result.bumps[0]).toMatchObject({
-      dependency: 'express',
-      candidateVersion: '5.2.1',
-      candidatePublishedAt: '2025-12-01T00:00:00Z',
-      candidateEngines: '>= 18',
-      peerDependenciesChanged: false,
-    });
-    expect(result.bumps[0]?.release.notes).toBe(EXPRESS_NOTES);
-    expect(scoreBump(result.bumps[0]!, NOW).total).toBe(62);
+    expect(result.bumps).toEqual([]);
     expect(result.missing).toEqual([
       { what: 'express version list', why: expect.stringContaining('size cap') },
     ]);
+    expect(urls).toContain(PACKUMENT);
   });
 
   it('still charges for a deprecated installed version when deps.dev is unavailable', async () => {
     const routes = happyRoutes().filter(
-      (route) => !route.match('/packages/express/versions/4.18.2'),
+      (route) =>
+        !route.match('/packages/express/versions/4.18.2') && !route.match(`${PACKUMENT}/4.18.2`),
     );
-    const registry = routes.find((route) => route.match('registry.npmjs.org/express'));
-    routes[routes.indexOf(registry!)] = {
-      match: urlContains('registry.npmjs.org/express'),
-      step: json({
-        'dist-tags': { latest: '5.2.1' },
-        versions: {
-          '4.18.2': { deprecated: 'no longer supported' },
-          '5.2.1': { engines: { node: '>= 18' } },
-        },
-        time: { '5.2.1': '2025-12-01T00:00:00Z' },
-        repository: { url: 'git+https://github.com/expressjs/express.git' },
-      }),
-    };
+    routes.unshift({
+      match: urlContains(`${PACKUMENT}/4.18.2`),
+      step: json({ version: '4.18.2', deprecated: 'no longer supported' }),
+    });
     const { fetcher } = fetcherWith(routes);
 
     const result = await ingestRepository(fetcher, TARGET, { sourceFiles: [ROUTE_FILE] });

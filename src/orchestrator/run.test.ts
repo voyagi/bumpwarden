@@ -77,14 +77,14 @@ function routes(): Route[] {
     { match: urlContains('/contents/package.json'), step: contents(MANIFEST) },
     { match: urlContains('/contents/package-lock.json'), step: contents(LOCK) },
     {
-      match: urlContains('registry.npmjs.org/express'),
+      match: urlContains('registry.npmjs.org/express/latest'),
       step: json({
-        'dist-tags': { latest: '5.2.1' },
-        versions: { '4.18.2': {}, '5.2.1': { engines: { node: '>= 18' } } },
-        time: { '4.18.2': '2022-10-08T20:14:32Z', '5.2.1': '2025-12-01T00:00:00Z' },
+        version: '5.2.1',
+        engines: { node: '>= 18' },
         repository: { url: 'git+https://github.com/expressjs/express.git' },
       }),
     },
+    { match: urlContains('registry.npmjs.org/express/4.18.2'), step: json({ version: '4.18.2' }) },
     {
       match: urlContains('/packages/express/versions/'),
       step: json({ publishedAt: '2025-12-01T00:00:00Z', isDeprecated: false, advisoryKeys: [] }),
@@ -296,11 +296,19 @@ describe('one run over one repository', () => {
     const entries = lines.map((line) => JSON.parse(line));
     expect(entries.map((entry) => entry.message)).toEqual([
       'run started',
+      'repository read',
       'bump handled',
       'run finished',
     ]);
-    expect(entries[1]).toMatchObject({ band: 'red', rule: 'RED-HOLD-1', outcome: 'opened' });
-    expect(entries[2]).toMatchObject({ counts: { green: 0, amber: 0, red: 1 }, actionsTaken: 1 });
+    expect(entries[1]).toMatchObject({
+      repository: DEMO.id,
+      dependencies: 1,
+      bumps: 1,
+      calls: expect.any(Number),
+      bytes: expect.any(Number),
+    });
+    expect(entries[2]).toMatchObject({ band: 'red', rule: 'RED-HOLD-1', outcome: 'opened' });
+    expect(entries[3]).toMatchObject({ counts: { green: 0, amber: 0, red: 1 }, actionsTaken: 1 });
     expect(lines.join('\n')).not.toContain('ghp_');
   });
 

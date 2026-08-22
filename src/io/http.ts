@@ -24,9 +24,18 @@ export interface FetcherStats {
   retries: number;
   budget: number;
   budgetRemaining: number;
+  /** Body bytes that arrived over the network this run. A cache hit adds nothing. */
+  bytes: number;
 }
 
-const DEFAULT_BUDGET = 300;
+/**
+ * Sized so the dependency cap bounds a run, not this: a pending dependency usually costs seven
+ * calls (two registry documents, two deps.dev facts, release notes, a compare that tries a second
+ * tag pair), sixty of them is 420, and the manifest, lockfile and source files take the rest. A
+ * dependency whose tags miss under both spellings costs up to ten, which the cap absorbs for a
+ * handful. A 39-dependency repository with every one pending spent 287 calls.
+ */
+const DEFAULT_BUDGET = 450;
 const DEFAULT_MAX_RETRIES = 3;
 
 /**
@@ -94,6 +103,7 @@ export class RunFetcher {
   private calls = 0;
   private cacheHits = 0;
   private retries = 0;
+  private bytes = 0;
 
   constructor(options: RunFetcherOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? ((url, init) => fetch(url, init));
@@ -112,6 +122,7 @@ export class RunFetcher {
       retries: this.retries,
       budget: this.budget,
       budgetRemaining: Math.max(0, this.budget - this.calls),
+      bytes: this.bytes,
     };
   }
 
@@ -200,7 +211,11 @@ export class RunFetcher {
       return { ok: false, reason: 'too-large' };
 
     const body = response.body;
-    if (!body) return { ok: true, text: await response.text() };
+    if (!body) {
+      const text = await response.text();
+      this.bytes += Buffer.byteLength(text);
+      return { ok: true, text };
+    }
 
     const decoder = new TextDecoder();
     const reader = body.getReader();
@@ -212,7 +227,9 @@ export class RunFetcher {
         const chunk = await reader.read();
         if (chunk.done) break;
 
+        // Counted before the cap decides, because a refused body still crossed the network.
         read += chunk.value.byteLength;
+        this.bytes += chunk.value.byteLength;
         if (read > this.maxBytes) return { ok: false, reason: 'too-large' };
         text += decoder.decode(chunk.value, { stream: true });
       }

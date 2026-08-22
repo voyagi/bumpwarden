@@ -286,6 +286,17 @@ async function runRepository(
   });
   missing.push(...ingest.missing);
 
+  const reads = fetcher.stats();
+  logger.info('repository read', {
+    runId,
+    repository: repository.id,
+    dependencies: ingest.dependenciesConsidered,
+    bumps: ingest.bumps.length,
+    calls: reads.calls,
+    cacheHits: reads.cacheHits,
+    bytes: reads.bytes,
+  });
+
   const context = await loadActorContext(deps, repository, runId, at, missing);
   const scored = ingest.bumps
     .map((candidate) => ({ candidate, score: scoreBump(candidate, at) }))

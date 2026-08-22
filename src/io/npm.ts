@@ -90,45 +90,74 @@ export function isValidPackageName(name: string): boolean {
   return name.length > 0 && name.length <= 214 && PACKAGE_NAME.test(name);
 }
 
+function malformed(detail: string): Outcome<never> {
+  return { ok: false, reason: 'malformed', status: null, detail };
+}
+
+const VERSIONS_ABOVE_UNREAD =
+  'the registry document is over the size cap, so the versions above the installed one could not be read';
+
 /**
- * The packument is the one read that grows without bound. `prisma` is 44 MB and `@prisma/client`
- * 68 MB, each with around ten thousand versions, the registry's abbreviated form is still 38 MB for
- * the second, and the cap that protects this container refused both, so two dependencies of a real
- * project went unscored. The two documents read here stay a few KB at any version count and carry
- * everything the scorer takes from a packument except the version list, which only decides a
- * candidate when `latest` sits below the installed version, and the publish times, which deps.dev
- * is asked for first anyway. What is not read is recorded rather than guessed.
+ * The one registry read that grows without bound: every version's manifest plus every publish time.
+ * `prisma` is 44 MB and `@prisma/client` 68 MB, `typescript` 16 MB, and a 39-dependency repository
+ * pulled 197 MB of these per run, nearly all of it never used. So this is no longer the first read.
+ * It is consulted for the version list when the installed version is ahead of `latest`, and for a
+ * publish time when deps.dev has none.
  */
-async function fetchVersionDocuments(
+async function fetchWholePackument(
+  fetcher: RunFetcher,
+  packageName: string,
+): Promise<Outcome<PackumentResponse>> {
+  return fetcher.getJson<PackumentResponse>(registryUrl(packageName));
+}
+
+function wholePackument(packageName: string, response: PackumentResponse): Packument {
+  return {
+    name: packageName,
+    distTags: response['dist-tags'] ?? {},
+    versions: response.versions ?? {},
+    time: response.time ?? {},
+    repositoryUrl: repositoryUrlOf(response),
+    gaps: [],
+  };
+}
+
+function sliceOf(
+  packageName: string,
+  latestVersion: string,
+  latest: VersionDocument,
+  versions: Record<string, VersionManifest>,
+  gaps: MissingSource[],
+): Packument {
+  return {
+    name: packageName,
+    distTags: { latest: latestVersion },
+    versions,
+    time: {},
+    repositoryUrl: repositoryUrlOf(latest),
+    gaps,
+  };
+}
+
+/**
+ * The two documents a pending bump needs, a few KB each at any version count: the candidate's own
+ * manifest and the installed one, for the peer ranges and the deprecation flag. Publish times are
+ * not in them, and deps.dev is asked for those first anyway. What is not read is recorded rather
+ * than guessed.
+ */
+async function fetchBumpDocuments(
   fetcher: RunFetcher,
   packageName: string,
   installedVersion: string,
-): Promise<Outcome<Packument>> {
-  const base = registryUrl(packageName);
-  const latest = await fetcher.getJson<VersionDocument>(`${base}/latest`);
-  if (!latest.ok) return latest;
-
-  const latestVersion = latest.value.version;
-  if (!latestVersion || !semver.valid(latestVersion)) {
-    return {
-      ok: false,
-      reason: 'malformed',
-      status: null,
-      detail: `the latest document of ${packageName} names no version`,
-    };
-  }
-
-  const gaps: MissingSource[] = [
-    {
-      what: `${packageName} version list`,
-      why: 'the registry document is over the size cap, so the latest and installed versions were read on their own',
-    },
-  ];
-  const versions: Record<string, VersionManifest> = { [latestVersion]: latest.value };
+  latestVersion: string,
+  latest: VersionDocument,
+): Promise<Packument> {
+  const versions: Record<string, VersionManifest> = { [latestVersion]: latest };
+  const gaps: MissingSource[] = [];
 
   if (semver.valid(installedVersion)) {
     const installed = await fetcher.getJson<VersionDocument>(
-      `${base}/${encodeURIComponent(installedVersion)}`,
+      `${registryUrl(packageName)}/${encodeURIComponent(installedVersion)}`,
     );
     if (installed.ok) versions[installedVersion] = installed.value;
     // A version the registry never had leaves the same hole a whole packument would; any other
@@ -141,54 +170,82 @@ async function fetchVersionDocuments(
     }
   }
 
-  return {
-    ok: true,
-    fromCache: latest.fromCache,
-    value: {
-      name: packageName,
-      distTags: { latest: latestVersion },
-      versions,
-      time: {},
-      repositoryUrl: repositoryUrlOf(latest.value),
-      gaps,
-    },
-  };
+  return sliceOf(packageName, latestVersion, latest, versions, gaps);
 }
 
+/**
+ * Reads the registry the way `npm install` would: `latest` first. When `latest` is above the
+ * installed version it is the candidate, and the whole version list decides nothing, so it is
+ * never downloaded. When the installed version is at `latest` there is no bump to propose, a
+ * version the maintainers hold back is not a bump, and one small read settles it. Only an
+ * installed version that is ahead of `latest` needs the list, which is rare, and which is where
+ * the size cap can still refuse a package.
+ */
 export async function fetchPackument(
   fetcher: RunFetcher,
   packageName: string,
   installedVersion: string,
 ): Promise<Outcome<Packument>> {
   if (!isValidPackageName(packageName)) {
-    return {
-      ok: false,
-      reason: 'malformed',
-      status: null,
-      detail: `${packageName} is not a valid npm package name`,
-    };
+    return malformed(`${packageName} is not a valid npm package name`);
   }
 
-  const result = await fetcher.getJson<PackumentResponse>(registryUrl(packageName));
-  if (!result.ok) {
-    if (result.reason === 'too-large') {
-      return fetchVersionDocuments(fetcher, packageName, installedVersion);
+  const latest = await fetcher.getJson<VersionDocument>(`${registryUrl(packageName)}/latest`);
+  if (!latest.ok) return latest;
+
+  const latestVersion = latest.value.version;
+  if (!latestVersion || !semver.valid(latestVersion)) {
+    return malformed(`the latest document of ${packageName} names no version`);
+  }
+
+  const installed = semver.coerce(installedVersion);
+  if (installed && semver.gt(latestVersion, installed)) {
+    const value = await fetchBumpDocuments(
+      fetcher,
+      packageName,
+      installedVersion,
+      latestVersion,
+      latest.value,
+    );
+    return { ok: true, fromCache: latest.fromCache, value };
+  }
+
+  const gaps: MissingSource[] = [];
+  if (installed && semver.gt(installed, latestVersion)) {
+    const whole = await fetchWholePackument(fetcher, packageName);
+    if (whole.ok) {
+      return {
+        ok: true,
+        fromCache: whole.fromCache,
+        value: wholePackument(packageName, whole.value),
+      };
     }
-    return result;
+    gaps.push({
+      what: `${packageName} version list`,
+      why: whole.reason === 'too-large' ? VERSIONS_ABOVE_UNREAD : whole.detail,
+    });
   }
 
+  const latestOnly = { [latestVersion]: latest.value };
   return {
     ok: true,
-    fromCache: result.fromCache,
-    value: {
-      name: packageName,
-      distTags: result.value['dist-tags'] ?? {},
-      versions: result.value.versions ?? {},
-      time: result.value.time ?? {},
-      repositoryUrl: repositoryUrlOf(result.value),
-      gaps: [],
-    },
+    fromCache: latest.fromCache,
+    value: sliceOf(packageName, latestVersion, latest.value, latestOnly, gaps),
   };
+}
+
+/**
+ * The registry's publish time for one version, paid for only when deps.dev had none: it costs the
+ * whole packument, and a package the cap refuses simply has no time to give.
+ */
+export async function fetchPublishTime(
+  fetcher: RunFetcher,
+  packageName: string,
+  version: string,
+): Promise<string | null> {
+  if (!isValidPackageName(packageName)) return null;
+  const whole = await fetchWholePackument(fetcher, packageName);
+  return whole.ok ? (whole.value.time?.[version] ?? null) : null;
 }
 
 function stableVersions(packument: Packument): string[] {
@@ -200,9 +257,11 @@ function peerRangesEqual(a: VersionManifest | undefined, b: VersionManifest | un
 }
 
 /**
- * The candidate is the highest stable version above the installed one, with `latest` preferred when
- * it is the same version, so a package whose maintainers hold `latest` behind a newer major is not
- * quietly pushed across that major.
+ * The candidate is `latest` whenever `latest` is above the installed version, so a package whose
+ * maintainers hold `latest` behind a newer major is not quietly pushed across that major. The
+ * version list only matters when the installed version is already ahead of `latest`, and then the
+ * highest stable version above it is the candidate. `fetchPackument` hands this function exactly
+ * the documents each of those cases needs.
  */
 export function resolveCandidate(packument: Packument, currentVersion: string): Candidate | null {
   const current = semver.coerce(currentVersion);

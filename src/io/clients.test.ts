@@ -3,6 +3,7 @@ import { RunFetcher } from './http.js';
 import { fetchAdvisory, fetchVersionFacts, severityFromCvss } from './depsdev.js';
 import {
   fetchPackument,
+  fetchPublishTime,
   githubRepoFrom,
   isValidPackageName,
   registryUrl,
@@ -144,27 +145,6 @@ describe('npm registry client', () => {
     expect(urls).toEqual([]);
   });
 
-  it('reads dist-tags, engines and the repository out of a packument', async () => {
-    const { fetcher, urls } = fetcherFor([
-      {
-        match: urlContains('registry.npmjs.org/express'),
-        step: json({
-          'dist-tags': { latest: '5.2.1' },
-          versions: { '5.2.1': { engines: { node: '>= 18' } } },
-          time: { '5.2.1': '2025-12-01T00:00:00Z' },
-          repository: { url: 'git+https://github.com/expressjs/express.git' },
-        }),
-      },
-    ]);
-
-    const result = await fetchPackument(fetcher, 'express', '4.18.2');
-
-    expect(result.ok && result.value.distTags.latest).toBe('5.2.1');
-    expect(result.ok && result.value.repositoryUrl).toContain('expressjs/express');
-    expect(result.ok && result.value.gaps).toEqual([]);
-    expect(urls).toEqual(['https://registry.npmjs.org/express']);
-  });
-
   /**
    * The registry's own shapes, read live on 2026-08-22: `prisma` is a 44 MB packument with 9,276
    * versions, its `latest` document is 5 KB, and a version document carries the repository, the
@@ -177,8 +157,14 @@ describe('npm registry client', () => {
     repository: { url: 'https://github.com/prisma/prisma.git', directory: 'packages/cli' },
   };
   const PRISMA_INSTALLED = { version: '5.0.0', engines: { node: '>=16.13' } };
+  const PRISMA = 'https://registry.npmjs.org/prisma';
 
-  function oversizedRegistry(installedStep: () => Response = json(PRISMA_INSTALLED)) {
+  /**
+   * The packument route answers a body over the cap, and it matches the bare name only: a route
+   * on `urlContains('/prisma')` would also answer `/prisma/latest`, with a packument where a
+   * version document is expected, and the client would call that malformed.
+   */
+  function prismaRegistry(installedStep: () => Response = json(PRISMA_INSTALLED)) {
     return fetcherFor(
       [
         { match: urlContains('/prisma/latest'), step: json(PRISMA_LATEST) },
@@ -189,8 +175,8 @@ describe('npm registry client', () => {
     );
   }
 
-  it('reads the latest and installed version documents when the packument is over the cap', async () => {
-    const { fetcher, urls } = oversizedRegistry();
+  it('reads the two version documents and never the packument when latest is above the installed version', async () => {
+    const { fetcher, urls } = prismaRegistry();
 
     const result = await fetchPackument(fetcher, 'prisma', '5.0.0');
 
@@ -200,10 +186,9 @@ describe('npm registry client', () => {
       distTags: { latest: '7.9.1' },
       repositoryUrl: 'https://github.com/prisma/prisma.git',
       time: {},
+      gaps: [],
     });
-    expect(result.value.gaps).toEqual([
-      { what: 'prisma version list', why: expect.stringContaining('size cap') },
-    ]);
+    expect(Object.keys(result.value.versions).sort()).toEqual(['5.0.0', '7.9.1']);
     expect(resolveCandidate(result.value, '5.0.0')).toEqual({
       version: '7.9.1',
       publishedAt: null,
@@ -211,46 +196,121 @@ describe('npm registry client', () => {
       engines: '^20.19 || ^22.12 || >=24.0',
       peerRangeChanged: true,
     });
+    expect(urls).toEqual([`${PRISMA}/latest`, `${PRISMA}/5.0.0`]);
+  });
+
+  it('stops after one small read when the installed version is at latest', async () => {
+    const { fetcher, urls } = prismaRegistry();
+
+    const result = await fetchPackument(fetcher, 'prisma', '7.9.1');
+
+    expect(result.ok && result.value.gaps).toEqual([]);
+    expect(result.ok && resolveCandidate(result.value, '7.9.1')).toBeNull();
+    expect(urls).toEqual([`${PRISMA}/latest`]);
+  });
+
+  it('reads the version list only when the installed version is ahead of latest', async () => {
+    const { fetcher, urls } = fetcherFor([
+      { match: urlContains('/demo/latest'), step: json({ version: '1.9.0' }) },
+      {
+        match: (url) => url.endsWith('/demo'),
+        step: json({
+          'dist-tags': { latest: '1.9.0', next: '2.1.0' },
+          versions: { '1.9.0': {}, '2.0.0': {}, '2.1.0': { engines: { node: '>= 20' } } },
+          time: { '2.1.0': '2026-02-01T00:00:00Z' },
+          repository: 'github:someone/demo',
+        }),
+      },
+    ]);
+
+    const result = await fetchPackument(fetcher, 'demo', '2.0.0');
+
+    expect(result.ok && result.value.gaps).toEqual([]);
+    expect(result.ok && resolveCandidate(result.value, '2.0.0')).toMatchObject({
+      version: '2.1.0',
+      publishedAt: '2026-02-01T00:00:00Z',
+      engines: '>= 20',
+    });
     expect(urls).toEqual([
-      'https://registry.npmjs.org/prisma',
-      'https://registry.npmjs.org/prisma/latest',
-      'https://registry.npmjs.org/prisma/5.0.0',
+      'https://registry.npmjs.org/demo/latest',
+      'https://registry.npmjs.org/demo',
     ]);
   });
 
+  it('records the versions above the installed one as unread when that list is over the cap', async () => {
+    const { fetcher, urls } = prismaRegistry();
+
+    const result = await fetchPackument(fetcher, 'prisma', '8.0.0');
+
+    expect(result.ok && result.value.gaps).toEqual([
+      { what: 'prisma version list', why: expect.stringContaining('size cap') },
+    ]);
+    expect(result.ok && resolveCandidate(result.value, '8.0.0')).toBeNull();
+    expect(urls).toEqual([`${PRISMA}/latest`, PRISMA]);
+  });
+
   it('still resolves a candidate when the installed version is gone from the registry', async () => {
-    const { fetcher } = oversizedRegistry(status(404));
+    const { fetcher } = prismaRegistry(status(404));
 
     const result = await fetchPackument(fetcher, 'prisma', '5.0.0');
 
     expect(result.ok && Object.keys(result.value.versions)).toEqual(['7.9.1']);
-    expect(result.ok && result.value.gaps).toHaveLength(1);
+    expect(result.ok && result.value.gaps).toEqual([]);
     expect(result.ok && resolveCandidate(result.value, '5.0.0')?.version).toBe('7.9.1');
   });
 
   it('records the installed document as a gap when it fails for any other reason', async () => {
-    const { fetcher } = oversizedRegistry(status(503));
+    const { fetcher } = prismaRegistry(status(503));
 
     const result = await fetchPackument(fetcher, 'prisma', '5.0.0');
 
     expect(result.ok && result.value.gaps.map((gap) => gap.what)).toEqual([
-      'prisma version list',
       'prisma@5.0.0 registry data',
     ]);
   });
 
-  it('reports the registry as unread when the latest document fails too', async () => {
-    const { fetcher } = fetcherFor(
-      [
-        { match: urlContains('/prisma/latest'), step: status(503) },
-        { match: (url) => url.endsWith('/prisma'), step: text('x'.repeat(4_000)) },
-      ],
-      { maxBytes: 1_000 },
-    );
+  it('passes the failure through, without a second read, when the latest document cannot be read', async () => {
+    const { fetcher, urls } = fetcherFor([
+      { match: urlContains('/prisma/latest'), step: status(503) },
+      { match: (url) => url.endsWith('/prisma'), step: json({ 'dist-tags': { latest: '7.9.1' } }) },
+    ]);
 
     const result = await fetchPackument(fetcher, 'prisma', '5.0.0');
 
     expect(result).toMatchObject({ ok: false, reason: 'unavailable' });
+    expect(urls.every((url) => url.endsWith('/prisma/latest'))).toBe(true);
+  });
+
+  it('calls a latest document that names no version malformed rather than reading around it', async () => {
+    const { fetcher, urls } = fetcherFor([
+      {
+        match: urlContains('registry.npmjs.org/demo'),
+        step: json({ 'dist-tags': { latest: '1.0.0' } }),
+      },
+    ]);
+
+    const result = await fetchPackument(fetcher, 'demo', '0.9.0');
+
+    expect(result).toMatchObject({ ok: false, reason: 'malformed' });
+    expect(urls).toEqual(['https://registry.npmjs.org/demo/latest']);
+  });
+
+  it('reads a publish time out of the whole packument, and has none for a package over the cap', async () => {
+    const { fetcher, urls } = fetcherFor([
+      {
+        match: (url) => url.endsWith('/demo'),
+        step: json({ time: { '2.1.0': '2026-02-01T00:00:00Z' } }),
+      },
+    ]);
+    const capped = prismaRegistry();
+
+    expect(await fetchPublishTime(fetcher, 'demo', '2.1.0')).toBe('2026-02-01T00:00:00Z');
+    expect(await fetchPublishTime(fetcher, 'demo', '9.9.9')).toBeNull();
+    expect(urls).toEqual(['https://registry.npmjs.org/demo']);
+    expect(fetcher.stats().calls).toBe(1);
+    expect(await fetchPublishTime(capped.fetcher, 'prisma', '7.9.1')).toBeNull();
+    expect(await fetchPublishTime(capped.fetcher, '../../etc/passwd', '1.0.0')).toBeNull();
+    expect(capped.urls).toEqual([PRISMA]);
   });
 });
 
