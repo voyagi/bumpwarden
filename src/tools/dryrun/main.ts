@@ -50,6 +50,7 @@ const store: BumpwardenStore = projectId
   ? new FirestoreStore({ projectId, emulated: Boolean(process.env.FIRESTORE_EMULATOR_HOST) })
   : new MemoryStore();
 const apiKey = process.env.GEMINI_API_KEY;
+const engine = apiKey ? createAdkBriefEngine({ apiKey }) : null;
 
 const dependencies: RunDependencies = {
   store,
@@ -58,7 +59,7 @@ const dependencies: RunDependencies = {
   // The one difference from a deployed run. Withholding the actor is what makes this a dry run:
   // act.ts records what it would have done and touches nothing.
   createActor: () => null,
-  engine: apiKey ? createAdkBriefEngine({ apiKey }) : null,
+  engine,
   githubToken: process.env.GITHUB_TOKEN ?? null,
   dashboardBaseUrl: process.env.SERVICE_BASE_URL ?? null,
 };
@@ -112,3 +113,9 @@ console.log(
     `${run.counts.red} red, ${run.counts.amber} amber, ${run.counts.green} green, ` +
     `${run.actionsTaken} actions taken (a dry run takes none).`,
 );
+
+// A paced run is slower on purpose, and a reader who is not told that reads it as a slow run.
+const paced = engine?.pacer.waited() ?? 0;
+if (paced > 0) {
+  console.log(`${(paced / 1000).toFixed(1)}s of that was waiting for the model's rate limit.`);
+}

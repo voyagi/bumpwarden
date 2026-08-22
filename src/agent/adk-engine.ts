@@ -9,7 +9,8 @@ import {
   type ToolUnion,
 } from '@google/adk';
 import { briefModelSchema } from '../core/brief.js';
-import { BRIEF_MODEL } from '../core/stack.js';
+import { BRIEF_MODEL, FREE_TIER_REQUESTS_PER_MINUTE } from '../core/stack.js';
+import { createRequestPacer, type RequestPacer } from './pace.js';
 import { briefInstruction, briefMessage, type BriefMaterial, type BriefRequest } from './prompt.js';
 import { ModelRefusal, type BriefEngine } from './write-brief.js';
 
@@ -27,9 +28,22 @@ const USER_ID = 'bumpwarden-run';
  */
 export const MAX_OUTPUT_TOKENS = 8192;
 
+/**
+ * What one brief costs at the API, measured on a live call rather than assumed: the model asks for
+ * its tools in one request and writes the answer in a second. Only those two carry token usage, and
+ * the tool results between them never leave the process.
+ */
+export const REQUESTS_PER_BRIEF = 2;
+
 export interface AdkBriefEngineOptions {
   apiKey: string;
   model?: string;
+  /** One pacer per key. A test injects one holding a clock it controls. */
+  pacer?: RequestPacer;
+}
+
+export interface PacedBriefEngine extends BriefEngine {
+  readonly pacer: RequestPacer;
 }
 
 /**
@@ -101,14 +115,65 @@ export function retryDelayFrom(message: string): number | null {
 }
 
 /**
+ * One request to the API, seen from this side of it. A model turn reports the tokens it used, a
+ * refused call reports a code instead, and a tool result reports neither because it never left the
+ * process. A partial belongs to a request that was counted when it began.
+ */
+export function countsAsRequest(event: Event): boolean {
+  if (event.partial === true) return false;
+  return event.usageMetadata !== undefined || typeof event.errorCode === 'string';
+}
+
+/**
+ * Everything that happens while the model works, kept out of the constructors below so it can be
+ * measured against the event shapes a live call actually yields. Each request is booked with the
+ * pacer as it arrives, which is the moment it was spent.
+ */
+export async function readRun(events: AsyncIterable<Event>, pacer: RequestPacer): Promise<string> {
+  let answer = '';
+  let refusal: Refusal | null = null;
+  let requests = 0;
+
+  // The runner hands back an async generator, so nothing has been sent yet: waiting here is still
+  // waiting before the request rather than after it.
+  await pacer.clear(REQUESTS_PER_BRIEF);
+
+  for await (const event of events) {
+    if (countsAsRequest(event)) {
+      requests += 1;
+      pacer.spend(1);
+    }
+    refusal = refusalOf(event) ?? refusal;
+    if (isFinalResponse(event)) {
+      const text = textOf(event);
+      if (text.length > 0) answer = text;
+    }
+  }
+
+  // Counting nothing means the framework stopped saying what a call costs, not that the call was
+  // free. Booking the known cost is what keeps a quiet change upstream from turning pacing off.
+  if (requests === 0) pacer.spend(REQUESTS_PER_BRIEF);
+
+  // An answer that arrived stands even if some earlier event carried an error: what the caller
+  // needs is the brief, and a refusal only matters when it is the reason there is not one.
+  if (answer.length === 0 && refusal) {
+    throw new ModelRefusal(refusal.code, refusal.message, retryDelayFrom(refusal.message));
+  }
+
+  return answer;
+}
+
+/**
  * The real Gemini path. It is created from an explicit key rather than from the ambient
  * environment so that a test, a script or a second instance can never pick one up by accident.
  */
-export function createAdkBriefEngine(options: AdkBriefEngineOptions): BriefEngine {
+export function createAdkBriefEngine(options: AdkBriefEngineOptions): PacedBriefEngine {
   const model = options.model ?? DEFAULT_BRIEF_MODEL;
+  const pacer = options.pacer ?? createRequestPacer({ limit: FREE_TIER_REQUESTS_PER_MINUTE });
 
   return {
     model,
+    pacer,
     async generate(request: BriefRequest, material: BriefMaterial, attempt: number) {
       const agent = new LlmAgent({
         name: 'bumpwarden_brief',
@@ -130,27 +195,13 @@ export function createAdkBriefEngine(options: AdkBriefEngineOptions): BriefEngin
         sessionService: new InMemorySessionService(),
       });
 
-      let answer = '';
-      let refusal: Refusal | null = null;
-
-      for await (const event of runner.runEphemeral({
-        userId: USER_ID,
-        newMessage: { role: 'user', parts: [{ text: briefMessage(request, material, attempt) }] },
-      })) {
-        refusal = refusalOf(event) ?? refusal;
-        if (isFinalResponse(event)) {
-          const text = textOf(event);
-          if (text.length > 0) answer = text;
-        }
-      }
-
-      // An answer that arrived stands even if some earlier event carried an error: what the caller
-      // needs is the brief, and a refusal only matters when it is the reason there is not one.
-      if (answer.length === 0 && refusal) {
-        throw new ModelRefusal(refusal.code, refusal.message, retryDelayFrom(refusal.message));
-      }
-
-      return answer;
+      return readRun(
+        runner.runEphemeral({
+          userId: USER_ID,
+          newMessage: { role: 'user', parts: [{ text: briefMessage(request, material, attempt) }] },
+        }),
+        pacer,
+      );
     },
   };
 }

@@ -1,7 +1,17 @@
+import { createEvent, type Event } from '@google/adk';
 import { describe, expect, it } from 'vitest';
 import { BRIEF_MAX_CHARS } from '../core/brief.js';
-import { BRIEF_MODEL } from '../core/stack.js';
-import { DEFAULT_BRIEF_MODEL, MAX_OUTPUT_TOKENS, retryDelayFrom } from './adk-engine.js';
+import { BRIEF_MODEL, FREE_TIER_REQUESTS_PER_MINUTE } from '../core/stack.js';
+import {
+  DEFAULT_BRIEF_MODEL,
+  MAX_OUTPUT_TOKENS,
+  REQUESTS_PER_BRIEF,
+  countsAsRequest,
+  readRun,
+  retryDelayFrom,
+} from './adk-engine.js';
+import type { RequestPacer } from './pace.js';
+import { ModelRefusal } from './write-brief.js';
 
 /**
  * Verbatim, from a live 429 on 2026-08-21. It is the only place the free tier states its own limit,
@@ -40,5 +50,133 @@ describe('the wait a refused call asks for', () => {
     expect(retryDelayFrom('You exceeded your current quota.')).toBeNull();
     expect(retryDelayFrom('')).toBeNull();
     expect(retryDelayFrom('retry in 0s')).toBeNull();
+  });
+});
+
+const ANSWER = '{"headline":"express 5 removes res.sendfile"}';
+
+/**
+ * The events one live call yields, built with the framework's own constructor so a fixture cannot
+ * drift from the shape the runner really produces. Read off a run on 2026-08-22: the model asks for
+ * its tools and reports the tokens it spent, the tools answer inside this process, then the model
+ * writes the brief. Two of the three cost a request, which is where REQUESTS_PER_BRIEF comes from.
+ */
+const MODEL_ASKS_FOR_TOOLS = createEvent({
+  author: 'bumpwarden_brief',
+  content: { role: 'model', parts: [{ functionCall: { name: 'read_release_notes', args: {} } }] },
+  usageMetadata: { promptTokenCount: 496, candidatesTokenCount: 24, totalTokenCount: 520 },
+});
+
+const TOOLS_ANSWER = createEvent({
+  author: 'bumpwarden_brief',
+  content: {
+    role: 'user',
+    parts: [{ functionResponse: { name: 'read_release_notes', response: {} } }],
+  },
+});
+
+const MODEL_ANSWERS = createEvent({
+  author: 'bumpwarden_brief',
+  content: { role: 'model', parts: [{ text: ANSWER }] },
+  usageMetadata: { promptTokenCount: 569, candidatesTokenCount: 154, totalTokenCount: 723 },
+});
+
+const REFUSED = createEvent({
+  author: 'bumpwarden_brief',
+  errorCode: '429',
+  errorMessage: LIVE_429,
+});
+
+async function* stream(...events: Event[]): AsyncIterable<Event> {
+  for (const event of events) yield event;
+}
+
+function recorder(): { pacer: RequestPacer; spent: () => number } {
+  let spent = 0;
+  return {
+    spent: () => spent,
+    pacer: {
+      clear: () => Promise.resolve(0),
+      spend: (count) => {
+        spent += count;
+      },
+      used: () => spent,
+      waited: () => 0,
+    },
+  };
+}
+
+describe('what a call to the model costs, and when it is paid', () => {
+  it('counts a model turn and a refusal, and not a tool result that never left the process', () => {
+    expect(countsAsRequest(MODEL_ASKS_FOR_TOOLS)).toBe(true);
+    expect(countsAsRequest(MODEL_ANSWERS)).toBe(true);
+    expect(countsAsRequest(REFUSED)).toBe(true);
+    expect(countsAsRequest(TOOLS_ANSWER)).toBe(false);
+  });
+
+  it('does not count a streamed piece of a request that was counted when it began', () => {
+    expect(countsAsRequest({ ...MODEL_ANSWERS, partial: true })).toBe(false);
+  });
+
+  it('books what a live brief really spends, and returns the answer', async () => {
+    const paced = recorder();
+
+    const answer = await readRun(
+      stream(MODEL_ASKS_FOR_TOOLS, TOOLS_ANSWER, MODEL_ANSWERS),
+      paced.pacer,
+    );
+
+    expect(answer).toBe(ANSWER);
+    expect(paced.spent()).toBe(REQUESTS_PER_BRIEF);
+  });
+
+  it('books the known cost when nothing reported one, rather than reading the call as free', async () => {
+    const paced = recorder();
+    const silent = createEvent({ content: { role: 'model', parts: [{ text: ANSWER }] } });
+
+    await readRun(stream(silent), paced.pacer);
+
+    expect(paced.spent()).toBe(REQUESTS_PER_BRIEF);
+  });
+
+  it('books a refused request too, because the API was asked either way', async () => {
+    const paced = recorder();
+
+    await expect(readRun(stream(REFUSED), paced.pacer)).rejects.toThrow(ModelRefusal);
+    expect(paced.spent()).toBe(1);
+  });
+
+  it('keeps an answer that arrived after an error rather than raising the error', async () => {
+    const paced = recorder();
+
+    await expect(readRun(stream(REFUSED, MODEL_ANSWERS), paced.pacer)).resolves.toBe(ANSWER);
+  });
+
+  it('waits for room before the first request goes out, not after it', async () => {
+    const order: string[] = [];
+    const pacer: RequestPacer = {
+      clear: () => {
+        order.push('waited for room');
+        return Promise.resolve(0);
+      },
+      spend: () => {
+        order.push('spent a request');
+      },
+      used: () => 0,
+      waited: () => 0,
+    };
+    async function* watched(): AsyncIterable<Event> {
+      order.push('asked the model');
+      yield MODEL_ANSWERS;
+    }
+
+    await readRun(watched(), pacer);
+
+    expect(order).toEqual(['waited for room', 'asked the model', 'spent a request']);
+  });
+
+  it('paces against the limit the free tier states, not one of its own', () => {
+    expect(FREE_TIER_REQUESTS_PER_MINUTE).toBe(20);
+    expect(LIVE_429).toContain(`limit: ${FREE_TIER_REQUESTS_PER_MINUTE}`);
   });
 });

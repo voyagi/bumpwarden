@@ -67,6 +67,9 @@ async function main(): Promise<void> {
 
   console.log(`\nstatus     ${brief.status} after ${brief.attempts} attempt(s), ${seconds}s`);
   console.log(`model      ${brief.model}`);
+  console.log(
+    `paced      ${(engine.pacer.waited() / 1000).toFixed(1)}s waiting for the rate limit`,
+  );
   console.log(`truncated  ${brief.truncated}`);
   console.log(`dropped    ${brief.droppedClaims} claim(s) the release notes did not support`);
 
