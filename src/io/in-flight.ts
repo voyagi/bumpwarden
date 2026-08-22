@@ -16,7 +16,7 @@ export const READS_IN_FLIGHT = 4;
 export async function mapInFlight<T, R>(
   items: readonly T[],
   width: number,
-  read: (item: T) => Promise<R>,
+  read: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
   const results: R[] = new Array<R>(items.length);
   let next = 0;
@@ -26,7 +26,7 @@ export async function mapInFlight<T, R>(
       const index = next;
       next += 1;
       try {
-        results[index] = await read(items[index] as T);
+        results[index] = await read(items[index] as T, index);
       } catch (error) {
         next = items.length;
         throw error;

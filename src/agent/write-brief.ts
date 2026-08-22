@@ -24,8 +24,8 @@ export interface BriefEngine {
  * What an engine throws when the API refused the call rather than answering it. The agent framework
  * hands a refusal back as a field on an event instead of throwing, so without this a 429 arrives as
  * an empty answer, is reported as a model that said nothing, and is retried straight back into the
- * same limit. The free tier allows 20 model requests a minute and a bump costs two, so on a real
- * queue this is the failure a run meets, not an edge case.
+ * same limit. The free tier allows a handful of model requests a minute and a bump costs two, so on
+ * a real queue this is the failure a run meets, not an edge case.
  */
 export class ModelRefusal extends Error {
   constructor(
@@ -40,7 +40,7 @@ export class ModelRefusal extends Error {
 }
 
 /** Long enough for the free tier's own minute window, short enough that a bad hint cannot park a run. */
-const MAX_RETRY_WAIT_MS = 30_000;
+export const MAX_RETRY_WAIT_MS = 30_000;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 

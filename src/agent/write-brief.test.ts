@@ -1,6 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { briefCacheKey, type BriefRecord } from '../core/brief.js';
 import { RUBRIC_VERSION } from '../core/rubric.js';
+import {
+  BRIEFS_IN_FLIGHT,
+  FREE_TIER_REQUESTS_PER_DAY,
+  FREE_TIER_REQUESTS_PER_MINUTE,
+} from '../core/stack.js';
 import { EXPRESS_NOTES, NOW, candidateBump, summaryOf } from '../testkit/fixtures.js';
 import type { BriefMaterial, BriefRequest } from './prompt.js';
 import {
@@ -201,9 +208,9 @@ describe('the brief cache', () => {
 });
 
 /**
- * A live run met this: the free tier allows 20 model requests a minute, a bump costs two, and the
- * API answers a burst with 429 and the wait it wants. Retrying inside that wait spends a second
- * request on the same limit and fails again, so both attempts were lost to one busy minute.
+ * A live run met this: the free tier allows a handful of model requests a minute, a bump costs two,
+ * and the API answers a burst with 429 and the wait it wants. Retrying inside that wait spends a
+ * second request on the same limit and fails again, so both attempts were lost to one busy minute.
  */
 describe('a call the model refused', () => {
   it('waits the time the API asked for before trying again, and says what refused', async () => {
@@ -345,5 +352,22 @@ describe('what a failed answer is told to have been', () => {
 
   it('still reads a good answer', () => {
     expect(readAnswer('```json\n{"a":1}\n```')).toEqual({ ok: true, value: { a: 1 } });
+  });
+});
+
+const WORDS: Record<number, string> = { 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five' };
+
+describe('how many briefs go out at once', () => {
+  it('is the number the deploy review and the README tell a reader', () => {
+    const review = readFileSync(
+      fileURLToPath(new URL('../../docs/deploy-review.md', import.meta.url)),
+      'utf8',
+    );
+    const readme = readFileSync(fileURLToPath(new URL('../../README.md', import.meta.url)), 'utf8');
+
+    expect(review).toContain(`at most ${BRIEFS_IN_FLIGHT} briefs at once`);
+    expect(review).toContain(`${FREE_TIER_REQUESTS_PER_MINUTE} requests a minute`);
+    expect(readme).toContain(`Briefs go out ${WORDS[BRIEFS_IN_FLIGHT]} at a time`);
+    expect(readme).toContain(`${FREE_TIER_REQUESTS_PER_DAY} a day`);
   });
 });

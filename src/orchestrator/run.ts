@@ -28,10 +28,12 @@ import {
 } from '../core/records.js';
 import { RUBRIC_VERSION } from '../core/rubric.js';
 import { scoreBump } from '../core/scorer.js';
+import { BRIEFS_IN_FLIGHT } from '../core/stack.js';
 import type { CandidateBump, MissingSource, Score } from '../core/types.js';
 import type { RepositoryActor } from '../io/github-actor.js';
 import type { RepoRef } from '../io/github.js';
 import type { RunFetcher } from '../io/http.js';
+import { mapInFlight } from '../io/in-flight.js';
 import { silentLogger, type Logger } from '../io/log.js';
 import { RUN_CLAIM_KEY, type BumpwardenStore } from '../io/store.js';
 import { actOnBump, type ActContext } from './act.js';
@@ -217,21 +219,26 @@ interface ProcessedBump {
   action: ActionRecord;
 }
 
+interface QueuedBump {
+  bump: BumpSummary;
+  candidate: CandidateBump;
+  score: Score;
+}
+
 async function processBump(
   deps: RunDependencies,
   repository: WatchedRepository,
   context: ActContext,
-  scored: { candidate: CandidateBump; score: Score },
-  budgets: { brief: string | null; action: boolean },
+  queued: QueuedBump,
+  brief: BriefRecord,
+  act: boolean,
 ): Promise<ProcessedBump> {
+  const { bump, score } = queued;
   const at = context.at;
-  const bump = summaryOf(repository, scored.candidate);
-  const request = briefRequestFor(bump, scored.candidate, scored.score);
-  const brief = await briefFor(deps, request, budgets.brief, at);
 
-  const action = budgets.action
-    ? await actOnBump(context, { bump, score: scored.score, brief })
-    : skippedAction(context.runId, bump, scored.score, at);
+  const action = act
+    ? await actOnBump(context, { bump, score, brief })
+    : skippedAction(context.runId, bump, score, at);
 
   const previous = await deps.store.getBump(repository.id, bump.key);
   return {
@@ -243,7 +250,7 @@ async function processBump(
       dependency: bump.dependency,
       currentVersion: bump.currentVersion,
       candidateVersion: bump.candidateVersion,
-      score: scored.score,
+      score,
       brief,
       action,
       firstSeenAt: previous?.firstSeenAt ?? at.toISOString(),
@@ -300,18 +307,38 @@ async function runRepository(
   });
 
   const context = await loadActorContext(deps, repository, runId, at, missing);
-  const scored = ingest.bumps
-    .map((candidate) => ({ candidate, score: scoreBump(candidate, at) }))
+  const scored: QueuedBump[] = ingest.bumps
+    .map((candidate) => ({
+      bump: summaryOf(repository, candidate),
+      candidate,
+      score: scoreBump(candidate, at),
+    }))
     .sort((left, right) => right.score.total - left.score.total);
 
   const { brief: briefBudget, action: actionBudget } = resolveBudgets(options);
   let actions = 0;
 
-  for (const [index, entry] of scored.entries()) {
-    const processed = await processBump(deps, repository, context, entry, {
-      brief: briefRefusal(index, briefBudget, deps.now().getTime() >= deadline),
-      action: index < actionBudget,
-    });
+  // The briefs go out several at a time, riskiest first, because each depends on nothing but its
+  // own material. The actions below still land one at a time in score order: GitHub's secondary
+  // limits measure the rate of writes, and the audit log reads riskiest first.
+  const briefs = await mapInFlight(scored, BRIEFS_IN_FLIGHT, (queued, index) =>
+    briefFor(
+      deps,
+      briefRequestFor(queued.bump, queued.candidate, queued.score),
+      briefRefusal(index, briefBudget, deps.now().getTime() >= deadline),
+      at,
+    ),
+  );
+
+  for (const [index, queued] of scored.entries()) {
+    const processed = await processBump(
+      deps,
+      repository,
+      context,
+      queued,
+      briefs[index] as BriefRecord,
+      index < actionBudget,
+    );
     await deps.store.appendAction(processed.action);
     await deps.store.saveBump(processed.record);
     if (LANDED.has(processed.action.outcome)) actions += 1;

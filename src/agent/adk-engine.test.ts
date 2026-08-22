@@ -1,24 +1,42 @@
 import { createEvent, type Event } from '@google/adk';
 import { describe, expect, it } from 'vitest';
 import { BRIEF_MAX_CHARS } from '../core/brief.js';
-import { BRIEF_MODEL, FREE_TIER_REQUESTS_PER_MINUTE } from '../core/stack.js';
+import {
+  BRIEFS_IN_FLIGHT,
+  BRIEF_MODEL,
+  FREE_TIER_REQUESTS_PER_DAY,
+  FREE_TIER_REQUESTS_PER_MINUTE,
+} from '../core/stack.js';
 import {
   DEFAULT_BRIEF_MODEL,
   MAX_OUTPUT_TOKENS,
   REQUESTS_PER_BRIEF,
   countsAsRequest,
+  limitFrom,
   readRun,
   retryDelayFrom,
 } from './adk-engine.js';
 import type { RequestPacer } from './pace.js';
-import { ModelRefusal } from './write-brief.js';
+import { MAX_RETRY_WAIT_MS, ModelRefusal } from './write-brief.js';
 
 /**
- * Verbatim, from a live 429 on 2026-08-21. It is the only place the free tier states its own limit,
- * and the only place the wait is written down, so the parser is measured against the real sentence
- * rather than a tidied one.
+ * Verbatim, from a live 429 on 2026-08-22, the sixth request inside one minute. It is the only
+ * place the free tier states its own limit, and the only place the wait is written down, so the
+ * parsers are measured against the real sentence rather than a tidied one.
  */
 const LIVE_429 =
+  'You exceeded your current quota, please check your plan and billing details. For more ' +
+  'information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To ' +
+  'monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for ' +
+  'metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, ' +
+  'model: gemini-3.5-flash\nPlease retry in 39.352527719s.';
+
+/**
+ * The same metric refusing under the day's allowance, verbatim from 2026-08-21. It names a bigger
+ * number than the minute's, and for a day it was read as a second minute limit: the refusal that
+ * settled it came with the minute empty, six minutes after the last request.
+ */
+const LIVE_429_DAY =
   'You exceeded your current quota, please check your plan and billing details. For more ' +
   'information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To ' +
   'monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for ' +
@@ -43,13 +61,27 @@ describe('the brief the model is asked for', () => {
 
 describe('the wait a refused call asks for', () => {
   it('reads it out of the sentence the API actually sends, rounded up to a whole millisecond', () => {
-    expect(retryDelayFrom(LIVE_429)).toBe(10_555);
+    expect(retryDelayFrom(LIVE_429)).toBe(39_353);
+    expect(retryDelayFrom(LIVE_429_DAY)).toBe(10_555);
   });
 
   it('has nothing to report when the refusal named no wait', () => {
     expect(retryDelayFrom('You exceeded your current quota.')).toBeNull();
     expect(retryDelayFrom('')).toBeNull();
     expect(retryDelayFrom('retry in 0s')).toBeNull();
+  });
+});
+
+describe('the limit a refused call names', () => {
+  it('reads the minute and the day off their real sentences', () => {
+    expect(limitFrom(LIVE_429)).toBe(FREE_TIER_REQUESTS_PER_MINUTE);
+    expect(limitFrom(LIVE_429_DAY)).toBe(FREE_TIER_REQUESTS_PER_DAY);
+  });
+
+  it('has nothing to report when no limit is named', () => {
+    expect(limitFrom('You exceeded your current quota.')).toBeNull();
+    expect(limitFrom('limit: 0, model: gemini-3.5-flash')).toBeNull();
+    expect(limitFrom('')).toBeNull();
   });
 });
 
@@ -91,15 +123,45 @@ async function* stream(...events: Event[]): AsyncIterable<Event> {
   for (const event of events) yield event;
 }
 
-function recorder(): { pacer: RequestPacer; spent: () => number } {
+interface Recorder {
+  pacer: RequestPacer;
+  spent: () => number;
+  /** How many times the room was handed back. */
+  released: () => number;
+  /** The last hold the engine asked for, or null when it asked for none. */
+  held: () => number | null;
+  /** The last limit the engine asked the pacer to adopt, or null when it asked for none. */
+  tightened: () => number | null;
+}
+
+function recorder(): Recorder {
   let spent = 0;
+  let released = 0;
+  let held: number | null = null;
+  let tightened: number | null = null;
   return {
     spent: () => spent,
+    released: () => released,
+    held: () => held,
+    tightened: () => tightened,
     pacer: {
-      clear: () => Promise.resolve(0),
-      spend: (count) => {
-        spent += count;
+      clear: () =>
+        Promise.resolve({
+          waitedMs: 0,
+          spend: (count) => {
+            spent += count;
+          },
+          release: () => {
+            released += 1;
+          },
+        }),
+      hold: (ms) => {
+        held = ms;
       },
+      tighten: (limit) => {
+        tightened = limit;
+      },
+      limit: () => FREE_TIER_REQUESTS_PER_MINUTE,
       used: () => spent,
       waited: () => 0,
     },
@@ -152,16 +214,71 @@ describe('what a call to the model costs, and when it is paid', () => {
     await expect(readRun(stream(REFUSED, MODEL_ANSWERS), paced.pacer)).resolves.toBe(ANSWER);
   });
 
+  /**
+   * Several briefs share one pacer now. Room that a finished call never handed back would count
+   * against every later call for the rest of the minute, and a refusal one brief was told about is
+   * true for the others too.
+   */
+  it('hands its room back once the call is over, answered or refused', async () => {
+    const answered = recorder();
+    await readRun(stream(MODEL_ASKS_FOR_TOOLS, TOOLS_ANSWER, MODEL_ANSWERS), answered.pacer);
+    expect(answered.released()).toBe(1);
+
+    const refused = recorder();
+    await expect(readRun(stream(REFUSED), refused.pacer)).rejects.toThrow(ModelRefusal);
+    expect(refused.released()).toBe(1);
+  });
+
+  it('holds every caller for the wait a refusal named, no longer than the retry cap', async () => {
+    const paced = recorder();
+    await expect(readRun(stream(REFUSED), paced.pacer)).rejects.toThrow(ModelRefusal);
+    expect(paced.held()).toBe(MAX_RETRY_WAIT_MS);
+
+    const brief = recorder();
+    const soon = createEvent({
+      author: 'bumpwarden_brief',
+      errorCode: '429',
+      errorMessage: LIVE_429_DAY,
+    });
+    await expect(readRun(stream(soon), brief.pacer)).rejects.toThrow(ModelRefusal);
+    expect(brief.held()).toBe(10_555);
+
+    const quiet = recorder();
+    await readRun(stream(MODEL_ANSWERS), quiet.pacer);
+    expect(quiet.held()).toBeNull();
+  });
+
+  it('hands the pacer the limit a refusal named, and nothing when none was named', async () => {
+    const paced = recorder();
+    await expect(readRun(stream(REFUSED), paced.pacer)).rejects.toThrow(ModelRefusal);
+    expect(paced.tightened()).toBe(FREE_TIER_REQUESTS_PER_MINUTE);
+
+    const unnamed = recorder();
+    const vague = createEvent({
+      author: 'bumpwarden_brief',
+      errorCode: '429',
+      errorMessage: 'You exceeded your current quota.',
+    });
+    await expect(readRun(stream(vague), unnamed.pacer)).rejects.toThrow(ModelRefusal);
+    expect(unnamed.tightened()).toBeNull();
+  });
+
   it('waits for room before the first request goes out, not after it', async () => {
     const order: string[] = [];
     const pacer: RequestPacer = {
       clear: () => {
         order.push('waited for room');
-        return Promise.resolve(0);
+        return Promise.resolve({
+          waitedMs: 0,
+          spend: () => {
+            order.push('spent a request');
+          },
+          release: () => undefined,
+        });
       },
-      spend: () => {
-        order.push('spent a request');
-      },
+      hold: () => undefined,
+      tighten: () => undefined,
+      limit: () => FREE_TIER_REQUESTS_PER_MINUTE,
       used: () => 0,
       waited: () => 0,
     };
@@ -176,7 +293,14 @@ describe('what a call to the model costs, and when it is paid', () => {
   });
 
   it('paces against the limit the free tier states, not one of its own', () => {
-    expect(FREE_TIER_REQUESTS_PER_MINUTE).toBe(20);
+    expect(FREE_TIER_REQUESTS_PER_MINUTE).toBe(5);
     expect(LIVE_429).toContain(`limit: ${FREE_TIER_REQUESTS_PER_MINUTE}`);
+    expect(LIVE_429_DAY).toContain(`limit: ${FREE_TIER_REQUESTS_PER_DAY}`);
+  });
+
+  it('never opens a burst the minute could not hold', () => {
+    expect(BRIEFS_IN_FLIGHT * REQUESTS_PER_BRIEF).toBeLessThanOrEqual(
+      FREE_TIER_REQUESTS_PER_MINUTE,
+    );
   });
 });

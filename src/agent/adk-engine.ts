@@ -12,7 +12,7 @@ import { briefModelSchema } from '../core/brief.js';
 import { BRIEF_MODEL, FREE_TIER_REQUESTS_PER_MINUTE } from '../core/stack.js';
 import { createRequestPacer, type RequestPacer } from './pace.js';
 import { briefInstruction, briefMessage, type BriefMaterial, type BriefRequest } from './prompt.js';
-import { ModelRefusal, type BriefEngine } from './write-brief.js';
+import { MAX_RETRY_WAIT_MS, ModelRefusal, type BriefEngine } from './write-brief.js';
 
 /** The model the About page names, so the page and the call cannot drift apart. */
 export const DEFAULT_BRIEF_MODEL = BRIEF_MODEL;
@@ -90,6 +90,12 @@ function textOf(event: Event): string {
 /** The API states its own wait inside the message, and it is the only place that number exists. */
 const RETRY_HINT = /retry in ([\d.]+)s/i;
 
+/**
+ * The limit the API was enforcing, in the same sentence. Two different quotas refuse under one
+ * metric name, the minute's and the day's, and only the number tells them apart.
+ */
+const LIMIT_HINT = /\blimit: (\d+)\b/;
+
 interface Refusal {
   code: string;
   message: string;
@@ -97,8 +103,8 @@ interface Refusal {
 
 /**
  * A refused call arrives as an error field on an event rather than as a thrown exception, and the
- * loop below would otherwise finish with an empty answer and no idea why. The free tier's limit is
- * 20 model requests a minute, so this is the ordinary failure on a real queue.
+ * loop below would otherwise finish with an empty answer and no idea why. The free tier allows a
+ * handful of model requests a minute, so this is the ordinary failure on a real queue.
  */
 function refusalOf(event: Event): Refusal | null {
   const raw = event as unknown as { errorCode?: unknown; errorMessage?: unknown };
@@ -112,6 +118,11 @@ function refusalOf(event: Event): Refusal | null {
 export function retryDelayFrom(message: string): number | null {
   const seconds = Number(RETRY_HINT.exec(message)?.[1]);
   return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds * 1000) : null;
+}
+
+export function limitFrom(message: string): number | null {
+  const limit = Number(LIMIT_HINT.exec(message)?.[1]);
+  return Number.isInteger(limit) && limit > 0 ? limit : null;
 }
 
 /**
@@ -136,28 +147,41 @@ export async function readRun(events: AsyncIterable<Event>, pacer: RequestPacer)
 
   // The runner hands back an async generator, so nothing has been sent yet: waiting here is still
   // waiting before the request rather than after it.
-  await pacer.clear(REQUESTS_PER_BRIEF);
+  const room = await pacer.clear(REQUESTS_PER_BRIEF);
 
-  for await (const event of events) {
-    if (countsAsRequest(event)) {
-      requests += 1;
-      pacer.spend(1);
+  try {
+    for await (const event of events) {
+      if (countsAsRequest(event)) {
+        requests += 1;
+        room.spend(1);
+      }
+      refusal = refusalOf(event) ?? refusal;
+      if (isFinalResponse(event)) {
+        const text = textOf(event);
+        if (text.length > 0) answer = text;
+      }
     }
-    refusal = refusalOf(event) ?? refusal;
-    if (isFinalResponse(event)) {
-      const text = textOf(event);
-      if (text.length > 0) answer = text;
-    }
+
+    // Counting nothing means the framework stopped saying what a call costs, not that the call was
+    // free. Booking the known cost is what keeps a quiet change upstream from turning pacing off.
+    if (requests === 0) room.spend(REQUESTS_PER_BRIEF);
+  } finally {
+    room.release();
   }
 
-  // Counting nothing means the framework stopped saying what a call costs, not that the call was
-  // free. Booking the known cost is what keeps a quiet change upstream from turning pacing off.
-  if (requests === 0) pacer.spend(REQUESTS_PER_BRIEF);
+  // The minute is full for every brief in flight, not only for the one that was told so. Without
+  // the hold, the others would each spend an attempt learning the same thing. A limit lower than
+  // the pacer's is adopted outright: the API knows this key's allowance and the published number
+  // is a reading of one day.
+  const retryAfterMs = refusal ? retryDelayFrom(refusal.message) : null;
+  if (retryAfterMs !== null) pacer.hold(Math.min(retryAfterMs, MAX_RETRY_WAIT_MS));
+  const named = refusal ? limitFrom(refusal.message) : null;
+  if (named !== null) pacer.tighten(named);
 
   // An answer that arrived stands even if some earlier event carried an error: what the caller
   // needs is the brief, and a refusal only matters when it is the reason there is not one.
   if (answer.length === 0 && refusal) {
-    throw new ModelRefusal(refusal.code, refusal.message, retryDelayFrom(refusal.message));
+    throw new ModelRefusal(refusal.code, refusal.message, retryAfterMs);
   }
 
   return answer;

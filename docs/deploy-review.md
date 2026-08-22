@@ -88,6 +88,13 @@ by Google to improve its products, and what is sent is public release notes and 
   minute, and npm's own client opens 15 sockets per host), and a source that hangs, resets or floods
   becomes a recorded missing source rather than a run that never returns. Proven against a real
   server on a real port, not a mock.
+- **The model is asked for at most 2 briefs at once.** A brief depends on nothing but its own
+  material, so the riskiest bumps are briefed together rather than in turn, while a pacer keeps
+  the whole run inside the 5 requests a minute the free tier allows, a refusal's named wait holds
+  every brief rather than only the one refused, and a refusal that names a smaller limit than the
+  published one is obeyed for the rest of the process. The free day is 20 requests, so a run
+  explains ten bumps and the rest keep their score until the next run. The actions that follow
+  land one at a time, riskiest first, against GitHub's own write limits.
 - **The image carries five SQL drivers it never opens.** `@google/adk` declares
   `@mikro-orm/mariadb`, `mssql`, `mysql`, `postgresql` and `sqlite` as peer dependencies without
   marking them optional, so npm installs all five; bumpwarden keeps its state in Firestore and

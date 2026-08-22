@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BriefEngine } from '../agent/write-brief.js';
 import { PER_RUN_BUDGETS, RUN_TIME_BUDGET_SECONDS } from '../core/policy.js';
 import type { RunRecord } from '../core/records.js';
+import { BRIEFS_IN_FLIGHT } from '../core/stack.js';
 import { RepositoryActor } from '../io/github-actor.js';
 import { RunFetcher } from '../io/http.js';
 import { createLogger } from '../io/log.js';
 import { MemoryStore } from '../io/memory-store.js';
 import { RUN_CLAIM_KEY, type BumpwardenStore } from '../io/store.js';
+import { deferred } from '../testkit/deferred.js';
 import { fakeGitHub, type FakeGitHub } from '../testkit/fake-github.js';
 import { DEMO, MANIFEST_JSON, NOW } from '../testkit/fixtures.js';
 import { json, routedFetch, urlContains, type Route } from '../testkit/scripted-fetch.js';
@@ -494,6 +496,131 @@ describe('budgets and failures', () => {
     const run = await executeRun(empty, { trigger: 'scheduled' });
     expect(run.repositories).toEqual([]);
     expect(run.counts).toEqual({ green: 0, amber: 0, red: 0 });
+  });
+});
+
+/**
+ * Five dependencies at five distances, so the queue has a riskiest bump and an order. The engine
+ * counts how many briefs are open at one moment and slows the riskiest one so it finishes last.
+ */
+function crowdedRoutes(): Route[] {
+  const latest: Record<string, string> = {
+    alpha: '2.0.0',
+    bravo: '1.4.0',
+    charlie: '1.0.3',
+    delta: '1.2.0',
+    echo: '1.1.0',
+  };
+  const names = Object.keys(latest);
+  return [
+    { match: urlContains('/git/trees/'), step: json({ truncated: false, tree: [] }) },
+    {
+      match: urlContains('/contents/package.json'),
+      step: contents({ dependencies: Object.fromEntries(names.map((name) => [name, '^1.0.0'])) }),
+    },
+    {
+      match: urlContains('/contents/package-lock.json'),
+      step: contents({
+        lockfileVersion: 3,
+        packages: Object.fromEntries(
+          names.map((name) => [`node_modules/${name}`, { version: '1.0.0' }]),
+        ),
+      }),
+    },
+    ...names.flatMap((name): Route[] => [
+      {
+        match: urlContains(`registry.npmjs.org/${name}/latest`),
+        step: json({
+          version: latest[name],
+          repository: { url: `git+https://github.com/demo/${name}.git` },
+        }),
+      },
+      { match: urlContains(`registry.npmjs.org/${name}/1.0.0`), step: json({ version: '1.0.0' }) },
+    ]),
+    {
+      match: urlContains('/versions/'),
+      step: json({ publishedAt: '2025-12-01T00:00:00Z', isDeprecated: false, advisoryKeys: [] }),
+    },
+    {
+      match: urlContains('/compare/'),
+      step: json({ total_commits: 1, commits: [{ commit: { message: 'fix: a thing' } }] }),
+    },
+  ];
+}
+
+interface MeteredEngine extends BriefEngine {
+  peak: () => number;
+  finished: string[];
+  /** Lets the one held brief answer. */
+  release: () => void;
+}
+
+/** Every brief answers at once except the held one, which waits for the test to let it go. */
+function meteredEngine(held: string): MeteredEngine {
+  let open = 0;
+  let peak = 0;
+  const finished: string[] = [];
+  const gate = deferred<void>();
+  return {
+    model: 'gemini-3.5-flash',
+    peak: () => peak,
+    finished,
+    release: () => gate.resolve(),
+    async generate(request) {
+      open += 1;
+      peak = Math.max(peak, open);
+      if (request.dependency === held) await gate.promise;
+      else await new Promise((resolve) => setImmediate(resolve));
+      open -= 1;
+      finished.push(request.dependency);
+      return VALID_BRIEF;
+    },
+  };
+}
+
+async function eventually(condition: () => boolean): Promise<void> {
+  for (let turn = 0; turn < 1000; turn += 1) {
+    if (condition()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error('the run never reached the expected state');
+}
+
+describe('the briefs of a run', () => {
+  /**
+   * A brief depends on nothing but its own material, so asking for them one after another cost
+   * the demo's seven bumps a minute and a half of a judge's wait. The riskiest brief is held open
+   * until every other has answered, which only a run that asks for several at once can do, and
+   * the actions must still land in score order whatever order the model answered in.
+   */
+  it('asks the model for several at once, riskiest first, and still acts in score order', async () => {
+    const lines: string[] = [];
+    const engine = meteredEngine('alpha');
+    const context = await harness({
+      engine,
+      logger: createLogger({ write: (line) => lines.push(line) }),
+      createFetcher: () =>
+        new RunFetcher({
+          fetchImpl: routedFetch(crowdedRoutes()).impl,
+          sleep: async () => undefined,
+        }),
+    });
+
+    const running = executeRun(context.deps, { trigger: 'scheduled' });
+    await eventually(() => engine.finished.length === 4);
+    engine.release();
+    const run = await running;
+
+    const handled = lines
+      .map((line) => JSON.parse(line) as { message: string; bump?: string; score?: number })
+      .filter((entry) => entry.message === 'bump handled');
+    const scores = handled.map((entry) => entry.score ?? -1);
+
+    expect(run.counts.green + run.counts.amber + run.counts.red).toBe(5);
+    expect(engine.peak()).toBe(BRIEFS_IN_FLIGHT);
+    expect(engine.finished.at(-1)).toBe('alpha');
+    expect(handled[0]?.bump).toContain('alpha');
+    expect(scores).toEqual([...scores].sort((left, right) => right - left));
   });
 });
 

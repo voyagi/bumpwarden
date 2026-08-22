@@ -7,7 +7,11 @@ import {
   RUN_TIME_BUDGET_SECONDS,
 } from '../../core/policy.js';
 import { BAND_RANGES, PUBLISHED_RUBRIC, RUBRIC_VERSION } from '../../core/rubric.js';
-import { FREE_TIER_REQUESTS_PER_MINUTE } from '../../core/stack.js';
+import {
+  BRIEFS_IN_FLIGHT,
+  FREE_TIER_REQUESTS_PER_DAY,
+  FREE_TIER_REQUESTS_PER_MINUTE,
+} from '../../core/stack.js';
 import type { Band } from '../../core/types.js';
 import { WORD_COLOR, verdictWord } from '../view-model.js';
 
@@ -103,9 +107,12 @@ export function PolicyPage(): JSX.Element {
               page says which limit it met.
             </p>
             <p style="margin-bottom:0">
-              Briefs also go out at the model's pace. The free tier answers{' '}
-              {FREE_TIER_REQUESTS_PER_MINUTE} requests a minute and a brief costs two, so a long
-              queue waits its turn rather than collecting refusals.
+              Briefs also go out at the model's pace, {BRIEFS_IN_FLIGHT} at a time. The free tier
+              answers {FREE_TIER_REQUESTS_PER_MINUTE} requests a minute and about{' '}
+              {FREE_TIER_REQUESTS_PER_DAY} a day, and a brief costs two, so a long queue waits its
+              turn rather than collecting refusals, and a bump the day has no room for keeps its
+              score and gets its brief on a later run. A ready brief is kept, so a repeat run over
+              the same bumps asks the model for nothing.
             </p>
           </div>
 

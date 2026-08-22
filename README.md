@@ -62,9 +62,13 @@ timeout. Bumps are handled riskiest first, and anything a limit cuts is still sc
 on, with the reason stored on the record. A green bump's pull request edits `package.json` and
 nothing else, because bumpwarden does not run your package manager against your lockfile.
 
-Briefs also go out at the pace the model allows. The free tier answers 20 requests a minute and a
-brief costs two, so a queue of twenty takes a couple of minutes of deliberate waiting rather than
-arriving all at once and collecting refusals. A paid key raises the limit; nothing else changes.
+Briefs go out two at a time, riskiest first, and at the pace the model allows. The free tier
+answered 5 requests a minute and 20 a day to the key this was built with (read off the API's own
+refusals on 2026-08-22; AI Studio shows yours), and a brief costs two, so a run explains up to ten
+bumps on a free day and waits its turn inside each minute rather than collecting refusals. A ready
+brief is kept, so a repeat run over the same bumps asks the model for nothing, and a bump the day
+had no room for gets its brief on the next run. A paid key raises both limits; nothing else
+changes.
 
 ## Run it locally
 

@@ -1,15 +1,24 @@
 # Demo video shot list
 
-Four minutes, recorded in one take, nothing sped up or cut. A run over the demo repository takes
-around two minutes, so the plan below triggers it early and spends the wait on the rubric and the
-policy rather than on a progress bar. Everything on screen is the deployed service.
+Four minutes, recorded in one take, nothing sped up or cut. A run over the demo repository whose
+briefs are already cached takes about ten seconds; one that has to write all seven briefs takes
+about three minutes, because the free tier answers five model requests a minute and twenty a day,
+and a brief costs two. The plan below triggers the run early either way and spends any wait on the
+rubric and the policy rather than on a progress bar. Everything on screen is the deployed service.
 
 ## Before recording
 
 - [ ] The deployed service answers: `/healthz` returns `{"ok":true,...}` and the dashboard loads.
-- [ ] The demo repository has no open bumpwarden issues or pull requests. Close them, so the run
-      opens fresh ones rather than updating yesterday's. Updating is the honest behaviour on a
-      second run, and it is worth showing once, but not as the only thing that happens.
+- [ ] **Run it once before recording, the same day, after 09:00 CEST when the free day resets.**
+      That run spends 14 of the day's 20 model requests and leaves seven ready briefs in the
+      cache. Check the queue page shows every brief as ready. The recorded run then reads GitHub,
+      npm and deps.dev live again and takes its briefs from the cache, which is the same artifact
+      a judge gets on a repeat press. Do not rehearse a second fresh run: there is not enough day
+      left for it.
+- [ ] The demo repository has no open bumpwarden issues or pull requests. Close the ones the
+      warm-up run opened, so the recorded run opens fresh ones rather than updating them. Updating
+      is the honest behaviour on a second run, and it is worth showing once, but not as the only
+      thing that happens.
 - [ ] The five minute "Run now" cooldown has expired.
 - [ ] Three browser tabs, in this order: the dashboard, the Cloud Run logs page in the Google Cloud
       console, the demo repository's issues page on GitHub.
@@ -85,5 +94,6 @@ updates these instead of opening more. That is the whole loop, and nothing in it
 - A run that finds nothing new: the demo repository already has open bumpwarden issues. Close them
   and start again.
 - 429 on "Run now": the cooldown. Wait it out rather than restarting the service.
-- A brief that comes back unavailable: the free-tier Gemini limit. Say so on camera and move on. The
-  score and the action are deterministic and do not depend on the brief.
+- A brief that comes back unavailable: the free-tier Gemini limit, most likely the day's twenty
+  requests already spent. Say so on camera and move on. The score and the action are deterministic
+  and do not depend on the brief, and the next run after the reset fills it in.
