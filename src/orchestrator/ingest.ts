@@ -132,11 +132,12 @@ async function bumpFor(
   context: { repoEngines: string | null; token: string | null; sourceFiles: SourceFile[] },
   missing: MissingSource[],
 ): Promise<CandidateBump | null> {
-  const packument = await fetchPackument(fetcher, installed.name);
+  const packument = await fetchPackument(fetcher, installed.name, installed.version);
   if (!packument.ok) {
     missing.push({ what: `${installed.name} registry data`, why: packument.detail });
     return null;
   }
+  missing.push(...packument.value.gaps);
 
   const candidate = resolveCandidate(packument.value, installed.version);
   if (!candidate) return null;

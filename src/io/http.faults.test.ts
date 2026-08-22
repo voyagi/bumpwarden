@@ -78,7 +78,7 @@ describe('a dependency that misbehaves on the wire', () => {
       maxBytes: 256 * 1024,
     });
 
-    expect(await fetcher.getText(url)).toMatchObject({ ok: false, reason: 'malformed' });
+    expect(await fetcher.getText(url)).toMatchObject({ ok: false, reason: 'too-large' });
   });
 
   it('reads a healthy source over the same path, so the bounds cost nothing real', async () => {

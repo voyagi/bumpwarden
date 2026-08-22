@@ -195,7 +195,7 @@ describe('RunFetcher', () => {
 
     expect(await fetcher.getText('https://example.test/huge')).toMatchObject({
       ok: false,
-      reason: 'malformed',
+      reason: 'too-large',
     });
   });
 

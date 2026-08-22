@@ -1,7 +1,7 @@
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
 export type FailureReason =
-  'not-found' | 'rate-limited' | 'budget-exhausted' | 'unavailable' | 'malformed';
+  'not-found' | 'rate-limited' | 'budget-exhausted' | 'unavailable' | 'malformed' | 'too-large';
 
 export type Outcome<T> =
   | { ok: true; value: T; fromCache: boolean }
@@ -38,9 +38,10 @@ const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 /**
- * Nothing this service reads is legitimately large: the biggest is a registry packument for a
- * package with thousands of versions. The cap exists because the body arrives from a party that
- * chooses its size, and this container has 512 MB.
+ * The cap exists because the body arrives from a party that chooses its size, and this container
+ * has 512 MB. One legitimate read does pass it: a registry packument for a package with ten
+ * thousand versions (`prisma` is 44 MB, `@prisma/client` 68 MB), which is why `too-large` is its
+ * own reason rather than a malformed body, so the npm client can read such a package another way.
  */
 const DEFAULT_MAX_BYTES = 24 * 1024 * 1024;
 
@@ -164,7 +165,7 @@ export class RunFetcher {
         const body = await this.readBounded(response);
         if (body.ok) return { ok: true, value: body.text, fromCache: false };
         if (body.reason === 'too-large') {
-          return failure('malformed', response.status, `body over ${this.maxBytes} bytes: ${url}`);
+          return failure('too-large', response.status, `body over ${this.maxBytes} bytes: ${url}`);
         }
         // The headers arrived and the body did not. The status was a success, so this is not a
         // failure the retry ladder above knows about; it is still a source that could not be read.

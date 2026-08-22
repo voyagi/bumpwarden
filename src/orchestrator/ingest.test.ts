@@ -3,7 +3,14 @@ import { RunFetcher } from '../io/http.js';
 import { scoreBump } from '../core/scorer.js';
 import { ingestRepository } from './ingest.js';
 import { parseManifest, parseNpmLock, rangeFloor, resolveInstalled } from './manifest.js';
-import { json, routedFetch, status, urlContains, type Route } from '../testkit/scripted-fetch.js';
+import {
+  json,
+  routedFetch,
+  status,
+  text,
+  urlContains,
+  type Route,
+} from '../testkit/scripted-fetch.js';
 
 const NOW = new Date('2026-08-21T10:00:00Z');
 const TARGET = { owner: 'voyagi', repo: 'bumpwarden-demo-app', ref: 'main' };
@@ -86,10 +93,15 @@ function happyRoutes(): Route[] {
   ];
 }
 
-function fetcherWith(routes: Route[], budget = 300) {
+function fetcherWith(routes: Route[], budget = 300, maxBytes?: number) {
   const routed = routedFetch(routes);
   return {
-    fetcher: new RunFetcher({ fetchImpl: routed.impl, sleep: () => Promise.resolve(), budget }),
+    fetcher: new RunFetcher({
+      fetchImpl: routed.impl,
+      sleep: () => Promise.resolve(),
+      budget,
+      ...(maxBytes === undefined ? {} : { maxBytes }),
+    }),
     urls: routed.urls,
   };
 }
@@ -200,6 +212,47 @@ describe('ingestRepository', () => {
     expect(result.bumps).toHaveLength(1);
     expect(result.bumps[0]?.release.notes).toBeNull();
     expect(result.missing.map((m) => m.what)).toContain('express release notes');
+  });
+
+  /**
+   * `prisma` and `@prisma/client` have packuments of 44 and 68 MB, so the cap that protects the
+   * container refused both and two dependencies of a real project got no score at all. The same
+   * facts come out of two version documents of a few KB each, and the score must not move.
+   */
+  it('scores a dependency whose packument is over the cap the same from its version documents', async () => {
+    const routes = happyRoutes().filter((route) => !route.match('registry.npmjs.org/express'));
+    routes.unshift(
+      {
+        match: urlContains('registry.npmjs.org/express/latest'),
+        step: json({
+          version: '5.2.1',
+          engines: { node: '>= 18' },
+          repository: { url: 'git+https://github.com/expressjs/express.git' },
+        }),
+      },
+      {
+        match: urlContains('registry.npmjs.org/express/4.18.2'),
+        step: json({ version: '4.18.2', engines: { node: '>= 0.10.0' } }),
+      },
+      { match: (url) => url.endsWith('registry.npmjs.org/express'), step: text('x'.repeat(4_000)) },
+    );
+    const { fetcher } = fetcherWith(routes, 300, 1_000);
+
+    const result = await ingestRepository(fetcher, TARGET, { sourceFiles: [ROUTE_FILE] });
+
+    expect(result.bumps).toHaveLength(1);
+    expect(result.bumps[0]).toMatchObject({
+      dependency: 'express',
+      candidateVersion: '5.2.1',
+      candidatePublishedAt: '2025-12-01T00:00:00Z',
+      candidateEngines: '>= 18',
+      peerDependenciesChanged: false,
+    });
+    expect(result.bumps[0]?.release.notes).toBe(EXPRESS_NOTES);
+    expect(scoreBump(result.bumps[0]!, NOW).total).toBe(62);
+    expect(result.missing).toEqual([
+      { what: 'express version list', why: expect.stringContaining('size cap') },
+    ]);
   });
 
   it('still charges for a deprecated installed version when deps.dev is unavailable', async () => {
