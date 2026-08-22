@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RunFetcher } from './http.js';
+import { deferred } from '../testkit/deferred.js';
 import { scriptedFetch, text, type Step } from '../testkit/scripted-fetch.js';
 
 function response(status: number, body = '', headers: Record<string, string> = {}): () => Response {
@@ -33,6 +34,33 @@ describe('RunFetcher', () => {
     expect(second).toEqual({ ok: true, value: 'hello', fromCache: true });
     expect(urls).toHaveLength(1);
     expect(fetcher.stats()).toMatchObject({ calls: 1, cacheHits: 1, bytes: 5 });
+  });
+
+  /**
+   * With several dependencies read at once, two packages from one upstream repository ask for the
+   * same compare within milliseconds of each other. An outcome cache cannot help the second one,
+   * because there is no outcome yet; the request in flight has to be the thing that is shared.
+   */
+  it('joins a read already in flight rather than sending the same url twice', async () => {
+    const gate = deferred<void>();
+    let sent = 0;
+    const fetcher = new RunFetcher({
+      fetchImpl: async () => {
+        sent += 1;
+        await gate.promise;
+        return new Response('hello', { status: 200 });
+      },
+      sleep: noSleep,
+    });
+
+    const first = fetcher.getText('https://example.test/a');
+    const second = fetcher.getText('https://example.test/a');
+    gate.resolve();
+
+    expect(await first).toEqual({ ok: true, value: 'hello', fromCache: false });
+    expect(await second).toEqual({ ok: true, value: 'hello', fromCache: true });
+    expect(sent).toBe(1);
+    expect(fetcher.stats()).toMatchObject({ calls: 1, cacheHits: 1 });
   });
 
   it('counts the bytes that crossed the network, a refused body included', async () => {

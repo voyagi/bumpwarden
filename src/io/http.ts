@@ -96,7 +96,7 @@ export class RunFetcher {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly maxRetries: number;
   private readonly userAgent: string;
-  private readonly cache = new Map<string, Outcome<string>>();
+  private readonly cache = new Map<string, Promise<Outcome<string>>>();
   private readonly budget: number;
   private readonly timeoutMs: number;
   private readonly maxBytes: number;
@@ -128,15 +128,19 @@ export class RunFetcher {
 
   async getText(url: string, headers: Record<string, string> = {}): Promise<Outcome<string>> {
     const key = `${url}|${JSON.stringify(headers)}`;
-    const cached = this.cache.get(key);
-    if (cached) {
+    const known = this.cache.get(key);
+    if (known) {
       this.cacheHits += 1;
+      const cached = await known;
       return cached.ok ? { ...cached, fromCache: true } : cached;
     }
 
-    const outcome = await this.request(url, headers);
-    this.cache.set(key, outcome);
-    return outcome;
+    // The request is cached, not its outcome: with several dependencies read at once, two packages
+    // from one upstream repository ask for the same compare within milliseconds of each other, and
+    // the second must join the read in flight rather than start another.
+    const pending = this.request(url, headers);
+    this.cache.set(key, pending);
+    return pending;
   }
 
   async getJson<T>(url: string, headers: Record<string, string> = {}): Promise<Outcome<T>> {

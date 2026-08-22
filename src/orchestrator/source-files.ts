@@ -2,6 +2,7 @@ import type { SourceFile } from '../core/usage.js';
 import type { MissingSource } from '../core/types.js';
 import { fetchTextFile, fetchTree, type RepoRef } from '../io/github.js';
 import type { RunFetcher } from '../io/http.js';
+import { READS_IN_FLIGHT, mapInFlight } from '../io/in-flight.js';
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 const SKIP_SEGMENTS = ['node_modules/', 'dist/', 'build/', 'coverage/', 'vendor/', '.min.'];
@@ -66,9 +67,17 @@ export async function collectSourceFiles(
     });
   }
 
+  const reads = await mapInFlight(
+    candidates.slice(0, maxFiles),
+    READS_IN_FLIGHT,
+    async (entry) => ({
+      entry,
+      contents: await fetchTextFile(fetcher, target, entry.path, token),
+    }),
+  );
+
   const files: SourceFile[] = [];
-  for (const entry of candidates.slice(0, maxFiles)) {
-    const contents = await fetchTextFile(fetcher, target, entry.path, token);
+  for (const { entry, contents } of reads) {
     if (contents.ok) {
       files.push({ path: entry.path, text: contents.value });
       continue;

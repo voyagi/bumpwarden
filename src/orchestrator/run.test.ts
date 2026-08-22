@@ -306,6 +306,7 @@ describe('one run over one repository', () => {
       bumps: 1,
       calls: expect.any(Number),
       bytes: expect.any(Number),
+      seconds: expect.any(Number),
     });
     expect(entries[2]).toMatchObject({ band: 'red', rule: 'RED-HOLD-1', outcome: 'opened' });
     expect(entries[3]).toMatchObject({ counts: { green: 0, amber: 0, red: 1 }, actionsTaken: 1 });

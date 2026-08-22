@@ -273,6 +273,7 @@ async function runRepository(
 ): Promise<RepositoryResult> {
   const logger = deps.logger ?? silentLogger;
   const fetcher = deps.createFetcher();
+  const readStarted = performance.now();
   const target: RepoRef = { owner: repository.owner, repo: repository.repo, ref: repository.ref };
   const missing: MissingSource[] = [];
 
@@ -295,6 +296,7 @@ async function runRepository(
     calls: reads.calls,
     cacheHits: reads.cacheHits,
     bytes: reads.bytes,
+    seconds: Math.round((performance.now() - readStarted) / 100) / 10,
   });
 
   const context = await loadActorContext(deps, repository, runId, at, missing);

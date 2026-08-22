@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RunFetcher } from '../io/http.js';
+import { READS_IN_FLIGHT } from '../io/in-flight.js';
+import { meterInFlight } from '../testkit/in-flight-meter.js';
 import { json, routedFetch, status, urlContains, type Route } from '../testkit/scripted-fetch.js';
 import { collectSourceFiles } from './source-files.js';
 
@@ -105,6 +107,35 @@ describe('collecting a repository the run cannot clone', () => {
     const result = await collectSourceFiles(fetcher, TARGET);
     expect(result.files.map((file) => file.path)).toEqual(['b.ts']);
     expect(result.missing[0]?.what).toBe('a.ts');
+  });
+
+  it('reads the files a few at a time and still lists them shallowest first', async () => {
+    const routed = routedFetch([
+      treeRoute([
+        { path: 'src/a/b/deep.ts' },
+        { path: 'index.ts' },
+        { path: 'src/app.ts' },
+        { path: 'lib.ts' },
+        { path: 'util.ts' },
+        { path: 'src/x.ts' },
+      ]),
+      contentRoute(),
+    ]);
+    const meter = meterInFlight(routed.impl, (url) => (url.includes('index.ts') ? 10 : 0));
+    const fetcher = new RunFetcher({ fetchImpl: meter.impl, sleep: async () => undefined });
+
+    const result = await collectSourceFiles(fetcher, TARGET);
+
+    expect(result.files.map((file) => file.path)).toEqual([
+      'index.ts',
+      'lib.ts',
+      'util.ts',
+      'src/app.ts',
+      'src/x.ts',
+      'src/a/b/deep.ts',
+    ]);
+    expect(meter.finished.at(-1)).toContain('index.ts');
+    expect(meter.peak()).toBe(READS_IN_FLIGHT);
   });
 
   it('reports a file list it could not fetch at all rather than scoring the repository as unused', async () => {

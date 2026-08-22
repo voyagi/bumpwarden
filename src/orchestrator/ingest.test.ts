@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { RunFetcher } from '../io/http.js';
+import { READS_IN_FLIGHT } from '../io/in-flight.js';
 import { scoreBump } from '../core/scorer.js';
 import { ingestRepository } from './ingest.js';
 import { parseManifest, parseNpmLock, rangeFloor, resolveInstalled } from './manifest.js';
+import { meterInFlight } from '../testkit/in-flight-meter.js';
 import {
   json,
   routedFetch,
@@ -394,5 +396,65 @@ describe('ingestRepository', () => {
 
     expect(new Set(urls).size).toBe(urls.length);
     expect(fetcher.stats().calls).toBe(urls.length);
+  });
+
+  /**
+   * Six dependencies, every read of the first one slowed so it finishes after all the others. The
+   * bump list and the missing list must still come out in the manifest's order: a run's output is
+   * compared across runs, and a list ordered by which network call happened to finish first would
+   * differ between two runs over the same repository.
+   */
+  it('reads several dependencies at once and keeps the manifest order however they finish', async () => {
+    const names = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot'];
+    const routes: Route[] = [
+      {
+        match: urlContains('/contents/package.json'),
+        step: contents({
+          dependencies: Object.fromEntries(names.map((name) => [name, '^1.0.0'])),
+        }),
+      },
+      {
+        match: urlContains('/contents/package-lock.json'),
+        step: contents({
+          lockfileVersion: 3,
+          packages: Object.fromEntries(
+            names.map((name) => [`node_modules/${name}`, { version: '1.0.0' }]),
+          ),
+        }),
+      },
+      ...names.flatMap((name): Route[] => [
+        {
+          match: urlContains(`registry.npmjs.org/${name}/latest`),
+          step: json({
+            version: '2.0.0',
+            repository: { url: `git+https://github.com/demo/${name}.git` },
+          }),
+        },
+        {
+          match: urlContains(`registry.npmjs.org/${name}/1.0.0`),
+          step: json({ version: '1.0.0' }),
+        },
+      ]),
+      {
+        match: urlContains('/versions/'),
+        step: json({ publishedAt: '2025-12-01T00:00:00Z', isDeprecated: false, advisoryKeys: [] }),
+      },
+      {
+        match: urlContains('/compare/'),
+        step: json({ total_commits: 1, commits: [{ commit: { message: 'fix: a thing' } }] }),
+      },
+    ];
+    const routed = routedFetch(routes);
+    const meter = meterInFlight(routed.impl, (url) => (url.includes('alpha') ? 10 : 0));
+    const fetcher = new RunFetcher({ fetchImpl: meter.impl, sleep: () => Promise.resolve() });
+
+    const result = await ingestRepository(fetcher, TARGET, { sourceFiles: [] });
+
+    expect(result.bumps.map((bump) => bump.dependency)).toEqual(names);
+    expect(result.missing.map((gap) => gap.what)).toEqual(
+      names.map((name) => `${name} release notes`),
+    );
+    expect(meter.finished.at(-1)).toContain('alpha');
+    expect(meter.peak()).toBe(READS_IN_FLIGHT);
   });
 });

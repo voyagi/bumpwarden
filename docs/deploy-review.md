@@ -84,8 +84,10 @@ by Google to improve its products, and what is sent is public release notes and 
   bounded by a call budget per run and by the brief and action budgets, held to one run at a time
   by the lease above, and the whole thing sits inside free tiers.
 - **Every outbound read belongs to somebody else.** Each carries its own twenty second deadline and
-  a size cap, and a source that hangs, resets or floods becomes a recorded missing source rather
-  than a run that never returns. Proven against a real server on a real port, not a mock.
+  a size cap, at most 4 go out at once (GitHub allows 100 concurrent requests and 900 read points a
+  minute, and npm's own client opens 15 sockets per host), and a source that hangs, resets or floods
+  becomes a recorded missing source rather than a run that never returns. Proven against a real
+  server on a real port, not a mock.
 - **The image carries five SQL drivers it never opens.** `@google/adk` declares
   `@mikro-orm/mariadb`, `mssql`, `mysql`, `postgresql` and `sqlite` as peer dependencies without
   marking them optional, so npm installs all five; bumpwarden keeps its state in Firestore and

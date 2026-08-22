@@ -8,6 +8,7 @@ import { classifyUsage, type SourceFile } from '../core/usage.js';
 import { fetchAdvisory, fetchVersionFacts } from '../io/depsdev.js';
 import { compareVersions, fetchReleaseNotes, fetchTextFile, type RepoRef } from '../io/github.js';
 import type { RunFetcher } from '../io/http.js';
+import { READS_IN_FLIGHT, mapInFlight } from '../io/in-flight.js';
 import {
   fetchPackument,
   fetchPublishTime,
@@ -248,9 +249,17 @@ export async function ingestRepository(
     sourceFiles: options.sourceFiles ?? [],
   };
 
+  // Each dependency records its gaps on a list of its own, joined in manifest order below, so what
+  // the run reports never depends on which dependency's reads happened to finish first.
+  const read = await mapInFlight(installed, READS_IN_FLIGHT, async (dependency) => {
+    const gaps: MissingSource[] = [];
+    const bump = await bumpFor(fetcher, dependency, context, gaps);
+    return { bump, gaps };
+  });
+
   const bumps: CandidateBump[] = [];
-  for (const dependency of installed) {
-    const bump = await bumpFor(fetcher, dependency, context, missing);
+  for (const { bump, gaps } of read) {
+    missing.push(...gaps);
     if (bump) bumps.push(bump);
   }
 
