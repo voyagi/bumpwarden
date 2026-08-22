@@ -168,14 +168,23 @@ export async function fetchTree(
 }
 
 /**
- * Compare two released versions, trying the same two tag spellings the release notes do. Without
- * this a project that tags `4.18.2` rather than `v4.18.2` loses every commit subject, which is the
+ * Compare two released versions across every tag spelling the pair can be written in. Without this
+ * a project that tags `4.18.2` rather than `v4.18.2` loses every commit subject, which is the
  * evidence the breaking-marker factor and the brief are built from: a live run over eight real
  * bumps lost five of them to the missing spelling.
  *
- * The prefix is applied to both sides together. A repository tags one way or the other, never one
- * of each, so the mixed pairs would be two extra requests that can never match.
+ * The mixed pairs are here because a project can adopt the prefix at a major and leave the older
+ * tag as it was. expressjs/express does exactly that (`4.18.2` and `v5.2.1`, both checked against
+ * the live API), and a major bump is the one that most needs its commits read. The consistent pairs
+ * go first, so a project that never changed spelling still costs two requests rather than four.
  */
+const TAG_PAIRS = [
+  ['v', 'v'],
+  ['', ''],
+  ['', 'v'],
+  ['v', ''],
+] as const;
+
 export async function compareVersions(
   fetcher: RunFetcher,
   target: RepoRef,
@@ -183,12 +192,12 @@ export async function compareVersions(
   candidate: string,
   token: string | null = null,
 ): Promise<Outcome<CompareFacts>> {
-  for (const prefix of ['v', '']) {
+  for (const [base, head] of TAG_PAIRS) {
     const result = await compareTags(
       fetcher,
       target,
-      `${prefix}${current}`,
-      `${prefix}${candidate}`,
+      `${base}${current}`,
+      `${head}${candidate}`,
       token,
     );
     if (result.ok) return result;
@@ -199,7 +208,7 @@ export async function compareVersions(
     ok: false,
     reason: 'not-found',
     status: 404,
-    detail: `no compare between ${current} and ${candidate} under either tag spelling`,
+    detail: `no compare between ${current} and ${candidate} under any tag spelling`,
   };
 }
 

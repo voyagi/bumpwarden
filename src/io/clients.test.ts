@@ -326,14 +326,40 @@ describe('github client', () => {
     expect(result.ok && result.value.commitSubjects).toEqual(['fix: a thing']);
   });
 
-  it('never mixes the two spellings across one compare', async () => {
+  /**
+   * Checked against the live API on 2026-08-22: expressjs/express answers 200 for the tag `4.18.2`
+   * and 404 for `v4.18.2`, then 200 for `v5.2.1` and 404 for `5.2.1`. A project that adopts the
+   * prefix at a major is exactly the project whose major bump most needs its commit subjects, and
+   * express is in this repository's own demo.
+   */
+  it('compares across a tag spelling that changed between the two versions', async () => {
+    const { fetcher, urls } = fetcherFor([
+      {
+        match: urlContains('/compare/4.18.2...v5.2.1'),
+        step: json({ total_commits: 2, commits: [{ commit: { message: 'feat!: drop app.del' } }] }),
+      },
+    ]);
+
+    const result = await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1');
+
+    expect(result.ok && result.value.commitSubjects).toEqual(['feat!: drop app.del']);
+    expect(urls.some((u) => u.includes('/compare/4.18.2...v5.2.1'))).toBe(true);
+  });
+
+  it('spends the consistent pairs before the mixed ones, and never repeats a range', async () => {
     const { fetcher, urls } = fetcherFor([]);
 
     await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1');
 
     // Compared as a set of exact ranges: "v4.18.2...v5.2.1" contains the substring
-    // "4.18.2...v5.2.1", so a contains check here would pass on a mixed pair it should catch.
-    expect(comparesIn(urls)).toEqual(new Set(['v4.18.2...v5.2.1', '4.18.2...5.2.1']));
+    // "4.18.2...v5.2.1", so a contains check would pass on a pair it never asked for.
+    expect(comparesIn(urls)).toEqual(
+      new Set(['v4.18.2...v5.2.1', '4.18.2...5.2.1', '4.18.2...v5.2.1', 'v4.18.2...5.2.1']),
+    );
+
+    const ordered = [...urls].filter((u) => u.includes('/compare/'));
+    expect(ordered[0]).toContain('/compare/v4.18.2...v5.2.1');
+    expect(ordered[1]).toContain('/compare/4.18.2...5.2.1');
   });
 
   it('records a miss once, naming both spellings, rather than one per attempt', async () => {
@@ -342,7 +368,7 @@ describe('github client', () => {
     expect(await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1')).toMatchObject({
       ok: false,
       reason: 'not-found',
-      detail: 'no compare between 4.18.2 and 5.2.1 under either tag spelling',
+      detail: 'no compare between 4.18.2 and 5.2.1 under any tag spelling',
     });
   });
 
