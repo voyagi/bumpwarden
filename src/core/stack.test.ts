@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { PER_RUN_BUDGETS, POLICY_RULES, RUN_TIME_BUDGET_SECONDS } from './policy.js';
 import { BAND_RANGES } from './rubric.js';
 import { SCHEDULE_CRON } from './schedule.js';
-import { BRIEF_MODEL, CLOUD_REGION, NODE_MAJOR } from './stack.js';
+import { BRIEF_MODEL, CLOUD_REGION, FREE_TIER_REQUESTS_PER_MINUTE, NODE_MAJOR } from './stack.js';
 
 /**
  * The README is the reproducibility claim: someone reads it and expects the commands to match the
@@ -58,5 +58,9 @@ describe('the README', () => {
     expect(readme).toContain(`at most ${PER_RUN_BUDGETS.briefs} briefs`);
     expect(readme).toContain(`at most ${PER_RUN_BUDGETS.actions} actions`);
     expect(readme).toContain(`a ${RUN_TIME_BUDGET_SECONDS / 60} minute deadline`);
+  });
+
+  it('states the model limit the run paces against, which is why a full queue takes minutes', () => {
+    expect(readme).toContain(`${FREE_TIER_REQUESTS_PER_MINUTE} requests a minute`);
   });
 });

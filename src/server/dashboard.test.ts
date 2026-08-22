@@ -5,7 +5,7 @@ import { LOCKFILE_POLICY, PER_RUN_BUDGETS, RUN_TIME_BUDGET_SECONDS } from '../co
 import type { BumpRecord, WatchedRepository } from '../core/records.js';
 import { bumpPath, projectPath } from '../core/routes.js';
 import { PUBLISHED_RUBRIC, RUBRIC_VERSION } from '../core/rubric.js';
-import { BRIEF_MODEL, CLOUD_REGION } from '../core/stack.js';
+import { BRIEF_MODEL, CLOUD_REGION, FREE_TIER_REQUESTS_PER_MINUTE } from '../core/stack.js';
 import { MemoryStore } from '../io/memory-store.js';
 import {
   actionRecord,
@@ -292,6 +292,12 @@ describe('the published policy', () => {
     expect(body).toContain(`at most ${PER_RUN_BUDGETS.briefs} briefs`);
     expect(body).toContain(`after ${RUN_TIME_BUDGET_SECONDS / 60} minutes`);
     expect(body).toContain('riskiest first');
+  });
+
+  it('publishes the model limit it paces against, since that is why a long run takes minutes', async () => {
+    const body = await text(store, '/rubric');
+    expect(body).toContain(`${FREE_TIER_REQUESTS_PER_MINUTE} requests a minute`);
+    expect(body).toContain('a brief costs two');
   });
 
   it('publishes the lockfile limitation in the same words the pull request uses', async () => {

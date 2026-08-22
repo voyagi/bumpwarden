@@ -7,6 +7,7 @@ import {
   RUN_TIME_BUDGET_SECONDS,
 } from '../../core/policy.js';
 import { BAND_RANGES, PUBLISHED_RUBRIC, RUBRIC_VERSION } from '../../core/rubric.js';
+import { FREE_TIER_REQUESTS_PER_MINUTE } from '../../core/stack.js';
 import type { Band } from '../../core/types.js';
 import { WORD_COLOR, verdictWord } from '../view-model.js';
 
@@ -93,13 +94,18 @@ export function PolicyPage(): JSX.Element {
               rest are carried to the next run rather than dropped. Each one that waits is recorded
               in the audit log saying so, so nothing goes quiet.
             </p>
-            <p style="margin-bottom:0">
+            <p>
               A first run over a long neglected repository would otherwise open dozens of issues at
               once, which is how a useful bot becomes one a maintainer blocks. The same run writes
               at most {PER_RUN_BUDGETS.briefs} briefs, and stops asking for them after{' '}
               {RUN_TIME_BUDGET_SECONDS / 60} minutes so a slow answer upstream cannot push a run
               past its deadline. A bump that misses out is still scored and still acted on, and its
               page says which limit it met.
+            </p>
+            <p style="margin-bottom:0">
+              Briefs also go out at the model's pace. The free tier answers{' '}
+              {FREE_TIER_REQUESTS_PER_MINUTE} requests a minute and a brief costs two, so a long
+              queue waits its turn rather than collecting refusals.
             </p>
           </div>
 

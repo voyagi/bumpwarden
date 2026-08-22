@@ -62,6 +62,10 @@ timeout. Bumps are handled riskiest first, and anything a limit cuts is still sc
 on, with the reason stored on the record. A green bump's pull request edits `package.json` and
 nothing else, because bumpwarden does not run your package manager against your lockfile.
 
+Briefs also go out at the pace the model allows. The free tier answers 20 requests a minute and a
+brief costs two, so a queue of twenty takes a couple of minutes of deliberate waiting rather than
+arriving all at once and collecting refusals. A paid key raises the limit; nothing else changes.
+
 ## Run it locally
 
 You need Node 24.13 or newer. `.node-version` pins the version this repository is built against.
