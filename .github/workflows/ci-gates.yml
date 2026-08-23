@@ -1,9 +1,8 @@
 name: gates
 on:
   pull_request:
+  # Every branch, so a change is checked on a clean runner before it has a pull request.
   push:
-    branches: [main]
-  # A branch can be checked on a clean runner before it has a pull request.
   workflow_dispatch:
 permissions:
   contents: read
