@@ -65,6 +65,15 @@ describe bumpwarden --region europe-west1` says which. A deleted service is re-c
 - **`model missing` in the boot log.** The model id no longer resolves. Move `BRIEF_MODEL` in
   `src/core/stack.ts` to the current id, re-pin it in `docs/adr/0001-stack.md`, deploy. Until
   then every brief records "unavailable" and the scores still stand.
+- **`model refused the key` in the boot log.** The API rejected the credential, not the model.
+  Nothing retries its way out of this and every brief in every run will record "unavailable", so
+  treat it as an outage of the explanation half: rotate the key with section 5, then restart. The
+  usual causes are a key deleted in AI Studio, a key from the wrong Google project, and a secret
+  version added without the service being updated to read it.
+- **`model not checked` in the boot log.** The probe could not reach the API at all, which says
+  nothing about the model. It is a warning rather than an error for that reason. If it repeats on
+  every cold start, read the reason it names: a code such as `ENOTFOUND` or `ECONNREFUSED` points
+  at egress from the service, not at Google.
 
 ## 4. External dependencies, and how each one fails
 

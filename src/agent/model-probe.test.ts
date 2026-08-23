@@ -27,6 +27,24 @@ describe('the model probe', () => {
     expect(seenKey).toBe('k-test');
   });
 
+  it('takes the API\'s own "models/" prefix off the path instead of encoding the slash', async () => {
+    let seenUrl = '';
+    const probe = await probeModel({
+      apiKey: 'k',
+      model: `models/${BRIEF_MODEL}`,
+      fetchImpl: async (input) => {
+        seenUrl = String(input);
+        return new Response(JSON.stringify({ version: '3.5' }), { status: 200 });
+      },
+    });
+
+    expect(seenUrl).toBe(`https://generativelanguage.googleapis.com/v1beta/models/${BRIEF_MODEL}`);
+    expect(seenUrl).not.toContain('%2F');
+    // The configured id is what the operator set and what the log has to name back to them.
+    expect(probe.model).toBe(`models/${BRIEF_MODEL}`);
+    expect(probe.status).toBe('listed');
+  });
+
   it('reports the version the alias resolves to and whether it generates', async () => {
     const probe = await probeModel({
       apiKey: 'k',
@@ -49,10 +67,28 @@ describe('the model probe', () => {
     expect(probe).toEqual({ status: 'missing', model: BRIEF_MODEL });
   });
 
-  it('tells a refused key, an outage and a timeout apart from a missing model', async () => {
-    const refused = await probeModel({ apiKey: 'k', fetchImpl: answering(403, {}) });
-    expect(refused).toMatchObject({ status: 'unreachable', reason: 'HTTP 403' });
+  /**
+   * A rejected key and a bad gateway are the same HTTP failure to a status check and opposite
+   * things to an operator: one is answered by rotating a secret, the other by waiting. Boot logs
+   * the first as an error precisely because nothing retries its way out of it.
+   */
+  it('calls a rejected credential refused, and keeps every other bad status unreachable', async () => {
+    for (const status of [401, 403]) {
+      const refused = await probeModel({ apiKey: 'k', fetchImpl: answering(status, {}) });
+      expect(refused).toEqual({ status: 'refused', model: BRIEF_MODEL, reason: `HTTP ${status}` });
+    }
 
+    for (const status of [400, 429, 500, 503]) {
+      const other = await probeModel({ apiKey: 'k', fetchImpl: answering(status, {}) });
+      expect(other).toEqual({
+        status: 'unreachable',
+        model: BRIEF_MODEL,
+        reason: `HTTP ${status}`,
+      });
+    }
+  });
+
+  it('tells an outage and a timeout apart from a missing model', async () => {
     const down = await probeModel({
       apiKey: 'k',
       fetchImpl: async () => {
@@ -70,6 +106,29 @@ describe('the model probe', () => {
         }),
     });
     expect(slow).toMatchObject({ status: 'unreachable', reason: 'timed out' });
+  });
+
+  /**
+   * The fake above throws a plain error with the code as its message, which is a shape Node's
+   * `fetch` never produces: it reports every network failure as the same `TypeError: fetch failed`
+   * and hides the real one on `cause`. So this one takes the error from the runtime instead of
+   * assuming it, by connecting to a loopback port nothing listens on, and hands that exact object
+   * to the probe. Without the cause the operator's log would name only "fetch failed".
+   */
+  it('names the network error underneath, not just the one fetch reports', async () => {
+    const thrown: unknown = await fetch('http://127.0.0.1:1/').then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe('fetch failed');
+
+    const probe = await probeModel({ apiKey: 'k', fetchImpl: () => Promise.reject(thrown) });
+
+    expect(probe.status).toBe('unreachable');
+    // Platform-independent on purpose: the code itself differs by operating system, but a cause
+    // having been unwrapped at all is what this pins.
+    expect(probe).toMatchObject({ reason: expect.stringMatching(/^fetch failed: \S/) });
   });
 
   it('does not read a listing with no version as an answer about the model', async () => {

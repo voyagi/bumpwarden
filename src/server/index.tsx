@@ -1,7 +1,8 @@
 import { serve } from '@hono/node-server';
 import { createAdkBriefEngine } from '../agent/adk-engine.js';
-import { probeModel } from '../agent/model-probe.js';
+import { probeModel, type ModelProbe } from '../agent/model-probe.js';
 import type { WatchedRepository } from '../core/records.js';
+import { BRIEF_MODEL } from '../core/stack.js';
 import { env } from '../env.js';
 import { FirestoreStore } from '../io/firestore-store.js';
 import { RepositoryActor, octokitRequest } from '../io/github-actor.js';
@@ -82,10 +83,26 @@ const app = createApp({
  * The model id is an alias Google can move or retire. Boot asks whether it still resolves and
  * logs the answer without spending a model request; a missing id is an error in the log, not a
  * crash, because the dashboard and the scores stand on their own and a run records the refusal.
+ * It runs after the port is bound rather than before it: the probe is a network round trip with a
+ * ten second ceiling, and a cold start has to answer `/healthz` and the scheduler's run without
+ * waiting on Google first. Nothing reads the answer, so nothing is racing it.
  */
 async function reportModel(): Promise<void> {
   if (!env.GEMINI_API_KEY) return;
-  const probe = await probeModel({ apiKey: env.GEMINI_API_KEY });
+
+  let probe: ModelProbe;
+  try {
+    probe = await probeModel({ apiKey: env.GEMINI_API_KEY });
+  } catch (error) {
+    // The probe answers rather than throws for every failure it anticipates, so arriving here
+    // means an unanticipated one. A line in the log must never be what stops the service.
+    log.warn('model not checked', {
+      model: BRIEF_MODEL,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+
   if (probe.status === 'listed') {
     log.info('model listed', {
       model: probe.model,
@@ -94,15 +111,20 @@ async function reportModel(): Promise<void> {
     });
   } else if (probe.status === 'missing') {
     log.error('model missing: the configured id no longer resolves', { model: probe.model });
+  } else if (probe.status === 'refused') {
+    log.error('model refused the key: every brief in every run will be unavailable', {
+      model: probe.model,
+      reason: probe.reason,
+    });
   } else {
     log.warn('model not checked', { model: probe.model, reason: probe.reason });
   }
 }
 
 await seedDemoRepository();
-await reportModel();
 
 serve({ fetch: app.fetch, hostname: bindHostname(env.HOST), port: env.PORT }, (info) => {
+  void reportModel();
   log.info('listening', {
     port: info.port,
     host: env.HOST,
