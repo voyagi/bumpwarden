@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { createAdkBriefEngine } from '../agent/adk-engine.js';
-import { probeModel, type ModelProbe } from '../agent/model-probe.js';
+import { MODEL_LOG, probeModel, type ModelProbe } from '../agent/model-probe.js';
 import type { WatchedRepository } from '../core/records.js';
 import { BRIEF_MODEL } from '../core/stack.js';
 import { env } from '../env.js';
@@ -99,7 +99,7 @@ async function reportModel(): Promise<void> {
   } catch (error) {
     // The probe answers rather than throws for every failure it anticipates, so arriving here
     // means an unanticipated one. A line in the log must never be what stops the service.
-    log.warn('model not checked', {
+    log.warn(MODEL_LOG.unreachable, {
       model: BRIEF_MODEL,
       reason: error instanceof Error ? error.message : String(error),
     });
@@ -107,20 +107,22 @@ async function reportModel(): Promise<void> {
   }
 
   if (probe.status === 'listed') {
-    log.info('model listed', {
+    log.info(MODEL_LOG.listed, {
       model: probe.model,
       version: probe.version,
       generates: probe.generates,
     });
   } else if (probe.status === 'missing') {
-    log.error('model missing: the configured id no longer resolves', { model: probe.model });
+    log.error(`${MODEL_LOG.missing}: the configured id no longer resolves`, {
+      model: probe.model,
+    });
   } else if (probe.status === 'refused') {
-    log.error('model refused the key: every brief in every run will be unavailable', {
+    log.error(`${MODEL_LOG.refused}: every brief in every run will be unavailable`, {
       model: probe.model,
       reason: probe.reason,
     });
   } else {
-    log.warn('model not checked', { model: probe.model, reason: probe.reason });
+    log.warn(MODEL_LOG.unreachable, { model: probe.model, reason: probe.reason });
   }
 }
 

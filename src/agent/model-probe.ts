@@ -19,6 +19,19 @@ export type ModelProbe =
   | { status: 'refused'; model: string; reason: string }
   | { status: 'unreachable'; model: string; reason: string };
 
+/**
+ * What boot says about each answer. It lives beside the answers rather than in the entry point
+ * because two documents explain these lines to whoever is reading a log at the time: the runbook
+ * says what to do about each, and the stack decision says what each means. A reworded message and
+ * a document still naming the old one is a map that has quietly stopped matching the place.
+ */
+export const MODEL_LOG: Record<ModelProbe['status'], string> = {
+  listed: 'model listed',
+  missing: 'model missing',
+  refused: 'model refused the key',
+  unreachable: 'model not checked',
+};
+
 export interface ModelProbeOptions {
   apiKey: string;
   model?: string;

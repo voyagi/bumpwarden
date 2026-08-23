@@ -1,6 +1,7 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { BRIEF_MODEL } from '../core/stack.js';
-import { probeModel } from './model-probe.js';
+import { MODEL_LOG, probeModel } from './model-probe.js';
 
 function answering(status: number, body: unknown): typeof fetch {
   return async () =>
@@ -235,5 +236,32 @@ describe('the model probe', () => {
       version: 'unknown',
       generates: false,
     });
+  });
+});
+
+/**
+ * Two documents explain these four lines to whoever is reading a log at three in the morning, and
+ * both were written by hand in another file. Rewording a message is the easy half; a document still
+ * naming the old one is a map that has quietly stopped matching the place it describes, and nothing
+ * fails when it happens.
+ */
+describe('what boot says about the model', () => {
+  it('is explained, phrase for phrase, where an operator goes looking', async () => {
+    const [runbook, decision] = await Promise.all([
+      readFile('docs/RUNBOOK.md', 'utf8'),
+      readFile('docs/adr/0001-stack.md', 'utf8'),
+    ]);
+
+    // The decision record says what each of the four means.
+    for (const phrase of Object.values(MODEL_LOG)) {
+      expect(decision).toContain(phrase);
+    }
+
+    // The runbook says what to do, so it carries the three that ask something of the reader. A
+    // listed model asks nothing, which is why it is the one that belongs only in the decision.
+    for (const phrase of [MODEL_LOG.missing, MODEL_LOG.refused, MODEL_LOG.unreachable]) {
+      expect(runbook).toContain(phrase);
+    }
+    expect(runbook).not.toContain(MODEL_LOG.listed);
   });
 });
