@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
 import { createAdkBriefEngine } from '../agent/adk-engine.js';
+import { probeModel } from '../agent/model-probe.js';
 import type { WatchedRepository } from '../core/records.js';
 import { env } from '../env.js';
 import { FirestoreStore } from '../io/firestore-store.js';
@@ -77,7 +78,29 @@ const app = createApp({
   baseUrl: env.SERVICE_BASE_URL ?? null,
 });
 
+/**
+ * The model id is an alias Google can move or retire. Boot asks whether it still resolves and
+ * logs the answer without spending a model request; a missing id is an error in the log, not a
+ * crash, because the dashboard and the scores stand on their own and a run records the refusal.
+ */
+async function reportModel(): Promise<void> {
+  if (!env.GEMINI_API_KEY) return;
+  const probe = await probeModel({ apiKey: env.GEMINI_API_KEY });
+  if (probe.status === 'listed') {
+    log.info('model listed', {
+      model: probe.model,
+      version: probe.version,
+      generates: probe.generates,
+    });
+  } else if (probe.status === 'missing') {
+    log.error('model missing: the configured id no longer resolves', { model: probe.model });
+  } else {
+    log.warn('model not checked', { model: probe.model, reason: probe.reason });
+  }
+}
+
 await seedDemoRepository();
+await reportModel();
 
 serve({ fetch: app.fetch, hostname: bindHostname(env.HOST), port: env.PORT }, (info) => {
   log.info('listening', {

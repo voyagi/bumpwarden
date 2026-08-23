@@ -55,6 +55,28 @@ TypeScript end to end on Node 24 (the agent framework requires 24.13 or newer).
 - GitHub's secondary rate limits (content-creating requests per minute) shape the actor: small
   batches, backoff on 403 and 429.
 
+## Model lifecycle
+
+`gemini-3.5-flash` is a family alias rather than a frozen model: Google moves what it points at and
+can retire it. Pinned on 2026-08-23, when the API listed the alias as version `3.5-flash-05-2026`
+with `generateContent` among its methods (`GET v1beta/models/gemini-3.5-flash`). The alias is kept
+over a dated id because the free tier and the documentation follow the alias.
+
+How drift is noticed, in order of cost:
+
+- At boot, the service asks the API whether the exact id still resolves and logs `model listed`
+  with the version it found, `model missing` when the id is gone, or `model not checked` when the
+  API could not be reached. This spends no model request, which matters on a free tier that
+  answers twenty a day and pays one for every cold start otherwise. A listing is not proof the
+  model answers.
+- The first brief of a run is the real call. A refusal is recorded on the bump with the reason the
+  API gave, never as a silent gap.
+- `npm run smoke:brief` is the operator's proof of life before a demo or a deploy: one real brief,
+  two model requests.
+
+Re-check the version before a public showing, and when `model missing` or a run full of refusals
+appears in the log, move `BRIEF_MODEL` in `src/core/stack.ts` and re-pin here.
+
 ## What would change this decision
 
 A blocking defect in `@google/adk` for TypeScript (switch the agent step to Genkit behind the same
