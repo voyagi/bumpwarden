@@ -3,6 +3,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # A branch can be checked on a clean runner before it has a pull request.
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -24,6 +26,31 @@ jobs:
       # The client-secret scan needs built client assets to look at, so it runs after the build
       # and is pointed at the static directory the server ships.
       - run: node scripts/check-client-secrets.mjs public
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # Advisories are published against versions already installed, so a scan that only
+      # ever ran at commit time would read clean on a quiet repository forever. This job fails
+      # on a HIGH or CRITICAL finding in the lockfile (dev dependencies included, they run on
+      # the build machine), in the Dockerfile, or on a credential committed into source.
+      # demo/ is another repository's deliberately stale tree and is skipped on purpose.
+      # The action and the scanner are both pinned: a mutable tag can be repointed by its owner.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          # There is no input for this, so it goes through the scanner's own environment.
+          TRIVY_INCLUDE_DEV_DEPS: 'true'
+        with:
+          version: v0.74.0
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          # Without this the scanner exits 0 on findings and the job passes while reporting them.
+          exit-code: '1'
+          ignore-unfixed: false
+          skip-dirs: demo
 
   image:
     runs-on: ubuntu-latest

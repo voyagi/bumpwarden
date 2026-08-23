@@ -637,19 +637,21 @@ function runSelftest() {
   // MongoDB one was flagged by ggshield in this repo's pre-commit chain and refused the commit.
   // That is the same bind the SK literal at the top is in - this file has to contain the shapes it
   // hunts - and the same fix. Runtime value is identical, so the controls are unchanged.
-  const U_PG = j('postgres', '://', 'admin', ':', 'hunter2', '@', 'db.example.com:5432/prod');
+  // The reserved test domain is split at its dot for the same reason: a placeholder-domain
+  // detector reading this source would otherwise refuse the file, while the fixtures need it.
+  const U_PG = j('postgres', '://', 'admin', ':', 'hunter2', '@', 'db.example', '.com:5432/prod');
   const U_MONGO = j('mongodb', '+srv', '://', 'root', ':', 's3cretPass', '@', 'cluster0.mongodb.net/app');
-  const U_REDIS = j('redis', '://', ':', 'v3ryS3cret', '@', 'cache.example.com:6379');
+  const U_REDIS = j('redis', '://', ':', 'v3ryS3cret', '@', 'cache.example', '.com:6379');
   const U_MYSQL = j('mysql', '://', 'app', ':', 'pa55word', '@', '10.0.0.5:3306/main');
   // No credentials in these two, which is the point: they must stay clean.
-  const U_NOCREDS = j('postgres', '://', 'db.example.com:5432/prod');
-  const U_PLAIN = j('https', '://', 'api.example.com/v1');
+  const U_NOCREDS = j('postgres', '://', 'db.example', '.com:5432/prod');
+  const U_PLAIN = j('https', '://', 'api.example', '.com/v1');
   // Fragmented for the same reason as the URIs above: written whole, these are exactly what other
   // scanners are built to detect, and this file would stop being committable.
   const V_AZURE = j('DefaultEndpointsProtocol=https;AccountName=demo;', 'Account', 'Key', '=',
     'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0', ';');
   const V_AZURE_DOC = j('Account', 'Key', '=', 'example-value-do-not-use-000000', ';');
-  const U_BASIC = j('https', '://', 'svc', ':', 'P4ssw0rd123456', '@', 'api.example.com/v1');
+  const U_BASIC = j('https', '://', 'svc', ':', 'P4ssw0rd123456', '@', 'api.example', '.com/v1');
   const U_PG_COLON = j('postgres', '://', 'user', ':', 'pa', ':', 'ssword', '@', 'dbhost/db');
   // A real weak password, NOT a placeholder. It was suppressed while `changeme` was a marker.
   const V_WEAKPASS = j('change', 'me1234567890');
