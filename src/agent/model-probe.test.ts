@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { BRIEF_MODEL } from '../core/stack.js';
 import { MODEL_LOG, probeModel } from './model-probe.js';
@@ -246,11 +247,13 @@ describe('the model probe', () => {
  * fails when it happens.
  */
 describe('what boot says about the model', () => {
-  it('is explained, phrase for phrase, where an operator goes looking', async () => {
-    const [runbook, decision] = await Promise.all([
-      readFile('docs/RUNBOOK.md', 'utf8'),
-      readFile('docs/adr/0001-stack.md', 'utf8'),
-    ]);
+  it('is explained, phrase for phrase, where an operator goes looking', () => {
+    // Resolved from this module rather than from the working directory, the way the other test
+    // that reads shipped documents does it: a run started anywhere else would otherwise not fail,
+    // it would simply not find the documents.
+    const root = fileURLToPath(new URL('../../', import.meta.url));
+    const runbook = readFileSync(`${root}docs/RUNBOOK.md`, 'utf8');
+    const decision = readFileSync(`${root}docs/adr/0001-stack.md`, 'utf8');
 
     // The decision record says what each of the four means.
     for (const phrase of Object.values(MODEL_LOG)) {
