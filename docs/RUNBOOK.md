@@ -21,11 +21,10 @@ Put the name from the first command where `REVISION` is. This takes seconds and 
 A run that was in progress on the old revision is cut off, and the next scheduled run starts
 clean, because a run's lease expires after 20 minutes on its own.
 
-Roll back when a deploy breaks a page, or when a run starts failing right after a deploy. Do not
-roll back for a quota refusal: that is section 4. Do not roll back for `model missing` either
-unless the deploy you are rolling back is the one that changed `BRIEF_MODEL`: if Google retired
-the id, every older revision names the same one and fails the same way, and the answer is to move
-forward (section 3).
+Roll back when a deploy breaks a page, or when a run starts failing right after one. Two things it
+will not fix. A quota refusal is section 4. A `model missing` at boot is section 3, unless the
+deploy you are undoing is the one that changed `BRIEF_MODEL`: if Google retired the id, every
+older revision names that same id and fails the same way, so the way out is forward.
 
 ## 2. Data rollback (Firestore), stated separately
 
