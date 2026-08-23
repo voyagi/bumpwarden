@@ -144,6 +144,24 @@ export function PolicyPage(): JSX.Element {
               from the rubric above.
             </p>
           </div>
+
+          <div class="card">
+            <h3>A brief that speaks for bumpwarden is not published</h3>
+            <p>
+              Release notes are written by whoever publishes the package, and they reach the model
+              inside the prompt. A model that follows an instruction planted there can write text
+              that speaks in this agent's name, announces an approval, or tells you to merge without
+              reading. None of that can move the score, which is arithmetic over the rubric above.
+              It could still sit in an issue signed by this agent and be believed.
+            </p>
+            <p style="margin-bottom:0">
+              So a brief carrying any of the three is dropped rather than labelled. The bump keeps
+              its score and its verdict, and the issue says the brief did not pass, in the same
+              words it uses when the model returns nothing at all. What is checked is the model's
+              own prose, never a quotation it took from the release notes, because judging those
+              would let one word in a changelog silence every brief written about it.
+            </p>
+          </div>
         </div>
       </section>
     </>

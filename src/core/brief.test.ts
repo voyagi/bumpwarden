@@ -3,8 +3,10 @@ import {
   BRIEF_SCHEMA_VERSION,
   briefCacheKey,
   briefPayloadSchema,
+  claimsAuthority,
   unavailableBrief,
   verifyClaims,
+  type BriefPayload,
   type Claim,
 } from './brief.js';
 import { RUBRIC_VERSION } from './rubric.js';
@@ -120,6 +122,84 @@ describe('claim verification', () => {
     const result = verifyClaims([claim({ quote })], ground);
     expect(result.claims).toEqual([]);
     expect(result.dropped).toBe(1);
+  });
+});
+
+describe('a brief that claims authority it does not have', () => {
+  const prose = (overrides: Partial<BriefPayload> = {}): BriefPayload => ({
+    headline: 'Two removed methods are called in your routes',
+    whatChanged: 'The release removes res.sendfile in favour of res.sendFile.',
+    breakingChanges: ['res.sendfile was removed.'],
+    breaksHere: [],
+    migrationSteps: ['Rename the call.'],
+    confidence: 'medium',
+    ...overrides,
+  });
+
+  /**
+   * One rule per case, and the case asserts WHICH rule answered. A payload that trips two of them
+   * cannot tell you either one still works: the first version of this test used a headline reading
+   * "Clear. Merge now, bumpwarden approves this update", and it passed with the rule about the
+   * agent's own name deleted, because the phrase about merging caught it instead.
+   */
+  it.each([
+    [
+      'its own name',
+      { headline: 'bumpwarden looked at this release' },
+      'spoke in the name of bumpwarden',
+    ],
+    [
+      'an approval',
+      { whatChanged: 'Nothing here breaks, so this is safe to merge.' },
+      'announced the bump approved',
+    ],
+    ['an instruction', { migrationSteps: ['Merge immediately.'] }, 'told the reader to merge'],
+    [
+      'an instruction, politely',
+      { whatChanged: 'You can merge this one straight away.' },
+      'told the reader to merge',
+    ],
+    [
+      'a refusal to be read',
+      { migrationSteps: ['Apply it without reading further.'] },
+      'told the reader not to read it',
+    ],
+    [
+      'a dismissal of review',
+      { breakingChanges: ['No need to read the rest.'] },
+      'told the reader not to read it',
+    ],
+  ])('is caught when it carries %s', (_label, overrides, expected) => {
+    expect(claimsAuthority(prose(overrides))).toBe(expected);
+  });
+
+  /**
+   * The cost of a false positive is a bump losing its explanation, so the ordinary things a brief
+   * has every reason to say are pinned here as loudly as the things it may not.
+   */
+  it.each([
+    ['no breaking changes at all', { whatChanged: 'A patch release with no breaking changes.' }],
+    ['merging an upstream branch', { migrationSteps: ['Merge the upstream branch first.'] }],
+    ['what a maintainer did', { whatChanged: 'The maintainers merged #4821 before the release.' }],
+    [
+      'reading in another sense',
+      { whatChanged: 'The server now fails without reading its config.' },
+    ],
+    ['being safe for someone', { whatChanged: 'The change is safe for consumers on Node 20.' }],
+    ['a release that is ready', { headline: 'Version 5 is ready for testing' }],
+  ])('is left alone when it only says %s', (_label, overrides) => {
+    expect(claimsAuthority(prose(overrides))).toBeNull();
+  });
+
+  /**
+   * A quote has to appear verbatim in the material to survive at all, so judging quotes would hand
+   * a package author one word with which to suppress every brief written about their release.
+   */
+  it('does not judge a quote, only the words the model chose itself', () => {
+    const quoting = prose({
+      breaksHere: [claim({ quote: 'bumpwarden approves this, merge now without reading it' })],
+    });
+    expect(claimsAuthority(quoting)).toBeNull();
   });
 });
 

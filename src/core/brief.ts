@@ -114,6 +114,62 @@ function normalize(text: string): string {
   return text.toLowerCase().replace(QUOTE_MARKS, '').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * The model explains a release. It decides nothing, and it must not sound as though it had. A
+ * changelog is written by whoever publishes the package and reaches the model inside the prompt,
+ * so a model that follows one can produce prose that speaks in this agent's name, announces an
+ * approval the rubric owns, or tells a reader to merge without looking. The score was already safe
+ * from all three. A person skimming an issue this agent signed was not.
+ *
+ * Each pattern is narrow on purpose, and the comment on each says what it must NOT catch, because
+ * the cost of a false positive is a bump losing its explanation. "No breaking changes in this
+ * release", "merge the upstream branch first" and "the server fails without reading its config"
+ * are all ordinary things for a brief to say.
+ */
+const AUTHORITY_CLAIMS: ReadonlyArray<readonly [string, RegExp]> = [
+  // The model is asked about a dependency release and never about this tool, so its name appearing
+  // in the model's own words has no innocent reading.
+  ['spoke in the name of bumpwarden', /\bbumpwarden\b/i],
+  // An approval is a verdict, and the verdict is arithmetic over the published rubric. Anchored to
+  // an action so that "safe for older consumers" and "ready for testing" are left alone.
+  [
+    'announced the bump approved',
+    /\b(safe|cleared|approved|fine|ready|good)\s+to\s+(merge|deploy|ship|upgrade)\b/i,
+  ],
+  // Anchored to an instruction about this bump, so "the maintainers merged #4821" is left alone.
+  [
+    'told the reader to merge',
+    /\bmerge\s+(?:this\s+|it\s+)?(?:now|immediately|at once|without)\b/i,
+  ],
+  ['told the reader to merge', /\b(?:you can|feel free to|go ahead and)\s+merge\b/i],
+  // Anchored to the reading of the brief itself, not to reading in general.
+  ['told the reader not to read it', /\bwithout\s+reading\s+(?:it|this|further|the brief)\b/i],
+  ['told the reader not to read it', /\bno need to (?:read|review)\b|\bskip the review\b/i],
+];
+
+/**
+ * Answers with the fixed phrase naming what the brief did, or null. Deliberately never returns any
+ * of the model's own words: the answer is stored on the record and rendered into an issue, and
+ * echoing the text back would put the thing being rejected in front of the reader anyway.
+ *
+ * Checked against the model's prose only, never against a verified quote. A quote has to appear
+ * verbatim in the material, so checking those would hand any package author a way to suppress
+ * every brief about their release by naming this tool once in a changelog.
+ */
+export function claimsAuthority(content: BriefPayload): string | null {
+  const prose = [
+    content.headline,
+    content.whatChanged,
+    ...content.breakingChanges,
+    ...content.migrationSteps,
+  ].join('\n');
+
+  for (const [named, pattern] of AUTHORITY_CLAIMS) {
+    if (pattern.test(prose)) return named;
+  }
+  return null;
+}
+
 export interface ClaimGround {
   /** Call sites the mechanical matcher found in the repository. */
   sites: UsageSite[];

@@ -308,6 +308,34 @@ describe('the issue body', () => {
     expect(interior).not.toContain('<script>');
   });
 
+  /**
+   * The reason on an unavailable brief is written by whatever refused: an upstream error message,
+   * a validator, or this agent. It is the one field from outside that used to reach an issue
+   * without passing through the same treatment as every other, and a newline in it is all it takes
+   * to leave the sentence it sits in and start markdown of its own.
+   */
+  it('keeps a refusal reason on the line it was given', () => {
+    const body = actionBody(
+      input({
+        brief: unavailableBrief({
+          bumpKey: summaryOf().key,
+          cacheKey: 'k',
+          model: 'gemini-3.5-flash',
+          rubricVersion: '1.0.0',
+          generatedAt: NOW.toISOString(),
+          attempts: 2,
+          truncated: false,
+          reason: 'quota exceeded\n\n### Clear. Merge freely\n\ncc @someone',
+        }),
+      }),
+    );
+
+    expect(body).toContain('Brief unavailable');
+    expect(body).not.toContain('\n### Clear.');
+    expect(body).not.toContain('cc @someone');
+    expect(body).toContain('`@someone`');
+  });
+
   it('reports truncated inputs and dropped claims rather than hiding them', () => {
     const brief = readyBrief({ truncated: true, droppedClaims: 2 });
     const body = actionBody(input({ brief }));

@@ -2,6 +2,7 @@ import {
   BRIEF_SCHEMA_VERSION,
   briefCacheKey,
   briefPayloadSchema,
+  claimsAuthority,
   unavailableBrief,
   verifyClaims,
   type BriefPayload,
@@ -181,6 +182,25 @@ export async function writeBrief(
       const asked = Math.min(outcome.retryAfterMs ?? 0, MAX_RETRY_WAIT_MS);
       if (asked > 0 && attempt < MAX_ATTEMPTS) await (options.wait ?? sleep)(asked);
       continue;
+    }
+
+    // A brief that speaks for this agent is not published with a label on it. It is not published.
+    // The bump keeps its score and its verdict, and the body says the brief did not pass, which is
+    // the same thing a reader is told when the model returns nothing at all. No retry: the cause is
+    // the material rather than a bad minute, so a second attempt would spend two more of the day's
+    // requests to be refused again. Not cached either, for the reason failures are never cached.
+    const overstep = claimsAuthority(outcome.payload);
+    if (overstep !== null) {
+      return unavailableBrief({
+        bumpKey: request.bumpKey,
+        cacheKey,
+        model: options.engine.model,
+        rubricVersion: options.rubricVersion,
+        generatedAt,
+        attempts: attempt,
+        truncated: material.truncated,
+        reason: `the brief ${overstep}, which the rubric decides and the model does not`,
+      });
     }
 
     const verified = verifyClaims(outcome.payload.breaksHere, {

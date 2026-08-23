@@ -189,10 +189,13 @@ function disclosure(model: string, confidence: string): string {
 
 function briefSection(brief: BriefRecord): string {
   if (brief.status !== 'ready' || !brief.content) {
+    // The reason is written by whatever refused: an upstream error message, a validator, or this
+    // agent. Every other field from outside goes through here before it becomes part of an issue,
+    // and there is no reason for this one to be the exception.
     return [
       '### Brief unavailable',
       '',
-      `The agent did not return a brief that passed validation (${brief.reason ?? 'no reason recorded'}).`,
+      `The agent did not return a brief that passed validation (${oneLine(brief.reason ?? 'no reason recorded')}).`,
       'The verdict above stands on the deterministic score alone.',
     ].join('\n');
   }

@@ -1,6 +1,6 @@
 import { rm, writeFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BriefContent } from '../core/brief.js';
+import { claimsAuthority, type BriefContent } from '../core/brief.js';
 import { actionBody, generatedByMarker } from '../core/issue-body.js';
 import {
   LOCKFILE_POLICY,
@@ -333,6 +333,23 @@ describe('the published policy', () => {
     // settled. The wording is pinned so it cannot drift back into an assertion.
     expect(body).toContain('rather than as a claim to have met a legal test');
     expect(body).not.toMatch(/complian|conforms to|meets the requirements/i);
+  });
+
+  /**
+   * A published promise about what happens to a brief that oversteps. The page and the code that
+   * enforces it are written in different files by different hands, so a real brief is put through
+   * the check here and the page is required to describe the outcome it actually gets.
+   */
+  it('publishes that a brief speaking for the agent is dropped, and drops one', async () => {
+    const page = await text(store, '/rubric');
+    expect(page).toContain('A brief that speaks for bumpwarden is not published');
+    expect(page).toContain('dropped rather than labelled');
+    expect(page).toContain('never a quotation it took from the release notes');
+
+    const brief = readyBrief();
+    const content = brief.content as NonNullable<typeof brief.content>;
+    expect(claimsAuthority({ ...content, headline: 'bumpwarden approves this' })).not.toBeNull();
+    expect(claimsAuthority(content)).toBeNull();
   });
 
   /**
