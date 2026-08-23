@@ -9,9 +9,14 @@ permissions:
 concurrency:
   group: gates-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# A job with no ceiling of its own runs for six hours before GitHub stops it, and these are metered
+# minutes on a private repository. A run takes under two minutes, so these caps are only ever
+# reached by something wedged: a scanner waiting on a database it cannot fetch, a build waiting on
+# a registry.
 jobs:
   gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -28,6 +33,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Advisories are published against versions already installed, so a scan that only
@@ -53,6 +59,7 @@ jobs:
 
   image:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The deploy is this image. A green test suite says nothing about whether it still builds,
