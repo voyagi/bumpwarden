@@ -13,8 +13,8 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: '.node-version'
           cache: npm
@@ -29,7 +29,7 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Advisories are published against versions already installed, so a scan that only
       # ever ran at commit time would read clean on a quiet repository forever. This job fails
       # on a HIGH or CRITICAL finding in the lockfile (dev dependencies included, they run on
@@ -54,7 +54,7 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The deploy is this image. A green test suite says nothing about whether it still builds,
       # and finding that out during a deploy is finding out too late.
       - run: docker build -t bumpwarden:ci .
