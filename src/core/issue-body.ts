@@ -261,6 +261,9 @@ function footer(input: BodyInput): string {
 
 const TRUNCATION_NOTE = "_Truncated to fit GitHub's body limit._";
 
+/** What separates two blocks of a body, and therefore what a length calculation has to allow for. */
+const SEPARATOR = '\n\n';
+
 /**
  * A cut lands wherever the limit falls, which can be between the two halves of an astral character:
  * an emoji in a changelog, or any character outside the basic plane. Half of one is a broken glyph
@@ -291,20 +294,21 @@ function assemble(
 
   const head = [marker(key), ...present(leading)];
   const tail = present(trailing);
-  const model = present(fromTheModel).join('\n\n');
+  const model = present(fromTheModel).join(SEPARATOR);
 
-  const whole = [...head, ...(model.length > 0 ? [model] : []), ...tail].join('\n\n');
+  const whole = [...head, ...(model.length > 0 ? [model] : []), ...tail].join(SEPARATOR);
   if (whole.length <= MAX_BODY) return whole;
 
-  // Measured rather than predicted: this is the body with the note in the model's place, so what
-  // is left is exactly the room the model gets, less the blank line that separates it from the
-  // note. Every deterministic section is already inside it.
-  const skeleton = [...head, TRUNCATION_NOTE, ...tail].join('\n\n');
-  const room = MAX_BODY - skeleton.length - 2;
+  // Measured rather than predicted. The skeleton is this same body with the note standing where
+  // the model's half would be, so every deterministic section is already counted inside it, and
+  // what the limit leaves over is the room the model gets. The separator comes off as well,
+  // because the kept text is joined to the note below it by one blank line.
+  const skeleton = [...head, TRUNCATION_NOTE, ...tail].join(SEPARATOR);
+  const room = MAX_BODY - skeleton.length - SEPARATOR.length;
   const shown = room > 0 ? cutAt(model, room) : '';
 
-  const cut = shown.length > 0 ? `${shown}\n\n${TRUNCATION_NOTE}` : TRUNCATION_NOTE;
-  return [...head, cut, ...tail].join('\n\n');
+  const cut = shown.length > 0 ? `${shown}${SEPARATOR}${TRUNCATION_NOTE}` : TRUNCATION_NOTE;
+  return [...head, cut, ...tail].join(SEPARATOR);
 }
 
 /** What the model wrote: the one part of a body a package author can lengthen. */

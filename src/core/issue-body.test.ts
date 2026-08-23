@@ -313,6 +313,12 @@ describe('the issue body', () => {
     const body = actionBody(input({ brief }));
     expect(body).toContain('truncated');
     expect(body).toContain('2 claims were dropped');
+
+    // The singular is its own sentence and had no test, which is how it read "1 claim were
+    // dropped" in an issue anyone could open.
+    const one = actionBody(input({ brief: readyBrief({ droppedClaims: 1 }) }));
+    expect(one).toContain('1 claim was dropped');
+    expect(one).not.toContain('claims were');
   });
 
   it('stays inside the size GitHub accepts for a body', () => {

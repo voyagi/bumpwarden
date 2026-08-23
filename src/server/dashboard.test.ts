@@ -327,6 +327,12 @@ describe('the published policy', () => {
     const body = await text(store, '/rubric');
     expect(body).toContain('Every brief says a model wrote it');
     expect(body).toContain('Article 50');
+
+    // Named as where the practice came from, never as a compliance claim. Article 50 divides its
+    // obligations by who you are and what you are doing, and this page is not the place that gets
+    // settled. The wording is pinned so it cannot drift back into an assertion.
+    expect(body).toContain('rather than as a claim to have met a legal test');
+    expect(body).not.toMatch(/complian|conforms to|meets the requirements/i);
   });
 
   /**
