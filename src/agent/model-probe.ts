@@ -74,12 +74,13 @@ function pathSegment(model: string): string {
 }
 
 /**
- * The reasons Google names when the credential, rather than the request, is the problem. Read off a
- * live refusal on 2026-08-23: an invalid key is answered `400 INVALID_ARGUMENT` carrying
- * `API_KEY_INVALID`, not the 401 the status alone would suggest. A key that exists without
- * entitlement answers 403.
+ * The one reason a 400 gives when the credential, rather than the request, is the problem. Read off
+ * a live refusal on 2026-08-23: an invalid key is answered `400 INVALID_ARGUMENT` carrying
+ * `API_KEY_INVALID` in the error details, not the 401 the status alone would suggest. A key that
+ * exists without entitlement answers 403 and an expired one 401, so neither needs its body read,
+ * and listing their reasons here would only be a test that can never come out true.
  */
-const REFUSAL_REASONS = ['API_KEY_INVALID', 'PERMISSION_DENIED', 'ACCESS_TOKEN_EXPIRED'];
+const KEY_REJECTED = 'API_KEY_INVALID';
 
 /**
  * A rejected credential is not an outage, and reading it as one is how a deployment holding the
@@ -93,7 +94,7 @@ async function refusesTheKey(response: Response): Promise<boolean> {
   if (response.status !== 400) return false;
 
   const detail = await response.text().catch(() => '');
-  return REFUSAL_REASONS.some((reason) => detail.includes(reason));
+  return detail.includes(KEY_REJECTED);
 }
 
 export async function probeModel(options: ModelProbeOptions): Promise<ModelProbe> {
