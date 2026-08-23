@@ -39,7 +39,7 @@ export interface ModelProbeOptions {
   timeoutMs?: number;
 }
 
-const MODELS_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/';
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/';
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
@@ -53,12 +53,16 @@ function reasonOf(error: unknown, depth = 0): string {
 
   const code = (error as { code?: unknown }).code;
   if (typeof code === 'string' && code.length > 0) return code;
-  if (error.message.length > 0) return error.message;
 
+  // The attempts inside come before this error's own message, not after it: an aggregate that does
+  // carry a summary ("All attempts failed") would otherwise answer with the summary and the codes
+  // it was gathered to hold would never be reached, which is the whole reason for looking.
   const nested = (error as { errors?: unknown }).errors;
-  if (depth < 3 && Array.isArray(nested) && nested.length > 0)
+  if (depth < 3 && Array.isArray(nested) && nested.length > 0) {
     return reasonOf(nested[0], depth + 1);
-  return error.name;
+  }
+
+  return error.message.length > 0 ? error.message : error.name;
 }
 
 /**
@@ -76,14 +80,16 @@ function describe(error: unknown): string {
 }
 
 /**
- * The API names a model `models/gemini-3.5-flash` in its own answer, and the id is edited by hand
- * whenever Google moves the alias, so the prefixed form is the one an operator is most likely to
- * paste. It has to come off before the id becomes a path segment: encoded whole, the slash makes
- * the request 404, this file would call a working model missing, and the runbook answers a missing
- * model with a rollback.
+ * The API addresses a model by its full resource name, and the collection is part of that name:
+ * `models/gemini-3.5-flash` is what its own answer calls this one, and a fine-tuned model lives
+ * under `tunedModels/` instead. A bare id means the models collection, which is the only one this
+ * service uses. The distinction matters because the slash is a path separator here rather than a
+ * character to encode: sent encoded, the request comes back 404, this file would call a working
+ * model missing, and the runbook answers a missing model with a rollback.
  */
-function pathSegment(model: string): string {
-  return encodeURIComponent(model.replace(/^models\//, ''));
+function resourcePath(model: string): string {
+  const name = model.includes('/') ? model : `models/${model}`;
+  return name.split('/').map(encodeURIComponent).join('/');
 }
 
 /**
@@ -115,7 +121,7 @@ export async function probeModel(options: ModelProbeOptions): Promise<ModelProbe
   const fetchImpl = options.fetchImpl ?? fetch;
   let response: Response;
   try {
-    response = await fetchImpl(`${MODELS_ENDPOINT}${pathSegment(model)}`, {
+    response = await fetchImpl(`${API_BASE}${resourcePath(model)}`, {
       headers: { 'x-goog-api-key': options.apiKey },
       signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });

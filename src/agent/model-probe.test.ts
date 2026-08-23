@@ -29,22 +29,38 @@ describe('the model probe', () => {
     expect(seenKey).toBe('k-test');
   });
 
-  it('takes the API\'s own "models/" prefix off the path instead of encoding the slash', async () => {
-    let seenUrl = '';
-    const probe = await probeModel({
-      apiKey: 'k',
-      model: `models/${BRIEF_MODEL}`,
-      fetchImpl: async (input) => {
-        seenUrl = String(input);
-        return new Response(JSON.stringify({ version: '3.5' }), { status: 200 });
-      },
-    });
+  /**
+   * The collection is part of a model's resource name, so the slash in it is a path separator and
+   * not a character to encode. Sent encoded the request comes back 404, which this file would
+   * report as a model that no longer exists and the runbook answers with a rollback.
+   */
+  it('treats the collection in a resource name as a path, not as a character to encode', async () => {
+    const base = 'https://generativelanguage.googleapis.com/v1beta/';
+    const asked = async (model: string): Promise<{ url: string; reported: string }> => {
+      let url = '';
+      const probe = await probeModel({
+        apiKey: 'k',
+        model,
+        fetchImpl: async (input) => {
+          url = String(input);
+          return new Response(JSON.stringify({ version: '3.5' }), { status: 200 });
+        },
+      });
+      return { url, reported: probe.model };
+    };
 
-    expect(seenUrl).toBe(`https://generativelanguage.googleapis.com/v1beta/models/${BRIEF_MODEL}`);
-    expect(seenUrl).not.toContain('%2F');
+    const bare = await asked(BRIEF_MODEL);
+    const prefixed = await asked(`models/${BRIEF_MODEL}`);
+    const tuned = await asked('tunedModels/bumps-001');
+
+    expect(bare.url).toBe(`${base}models/${BRIEF_MODEL}`);
+    expect(prefixed.url).toBe(`${base}models/${BRIEF_MODEL}`);
+    expect(tuned.url).toBe(`${base}tunedModels/bumps-001`);
+    for (const asking of [bare, prefixed, tuned]) expect(asking.url).not.toContain('%2F');
+
     // The configured id is what the operator set and what the log has to name back to them.
-    expect(probe.model).toBe(`models/${BRIEF_MODEL}`);
-    expect(probe.status).toBe('listed');
+    expect(prefixed.reported).toBe(`models/${BRIEF_MODEL}`);
+    expect(tuned.reported).toBe('tunedModels/bumps-001');
   });
 
   it('reports the version the alias resolves to and whether it generates', async () => {
@@ -167,6 +183,21 @@ describe('the model probe', () => {
     const probe = await probeModel({ apiKey: 'k', fetchImpl: () => Promise.reject(thrown) });
 
     expect(probe).toMatchObject({ status: 'unreachable', reason: 'fetch failed: ENOTFOUND' });
+  });
+
+  /**
+   * The aggregate usually summarises its attempts ("All attempts failed"), and answering with the
+   * summary would leave the codes it was gathered to hold unread, which is the only reason for
+   * opening it.
+   */
+  it('prefers the attempts inside an aggregate error to its own summary', async () => {
+    const attempt = Object.assign(new Error('connect failed'), { code: 'ECONNREFUSED' });
+    const aggregate = new AggregateError([attempt], 'All attempts failed');
+    const thrown = new TypeError('fetch failed', { cause: aggregate });
+
+    const probe = await probeModel({ apiKey: 'k', fetchImpl: () => Promise.reject(thrown) });
+
+    expect(probe).toMatchObject({ reason: 'fetch failed: ECONNREFUSED' });
   });
 
   it('stops instead of recursing when an aggregate error contains itself', async () => {
