@@ -190,8 +190,13 @@ function briefSection(brief: BriefRecord): string {
   }
 
   const content = brief.content;
+  // Both halves of the disclosure open the section, ahead of the model's own words rather than
+  // under them: a reader meets "a machine wrote this" before the text it is about, and neither
+  // half can be pushed off the end of the body by a long changelog.
   const parts = [
     generatedByMarker(brief.model),
+    disclosure(brief.model, content.confidence),
+    '',
     `### ${oneLine(content.headline)}`,
     '',
     multiLine(content.whatChanged),
@@ -207,16 +212,19 @@ function briefSection(brief: BriefRecord): string {
   if (content.breaksHere.length > 0) {
     parts.push('', '**What breaks here**', ...content.breaksHere.map(claimLine));
   }
-  parts.push('', disclosure(brief.model, content.confidence));
+
+  const notes: string[] = [];
   if (brief.truncated) {
-    parts.push('Some inputs were truncated to stay inside the token budget.');
+    notes.push('Some inputs were truncated to stay inside the token budget.');
   }
   if (brief.droppedClaims > 0) {
-    const plural = brief.droppedClaims === 1 ? 'claim' : 'claims';
-    parts.push(
-      `${brief.droppedClaims} ${plural} were dropped because the quoted text was not in the material the agent was given.`,
+    const plural = brief.droppedClaims === 1 ? 'claim was' : 'claims were';
+    notes.push(
+      `${brief.droppedClaims} ${plural} dropped because the quoted text was not in the material the agent was given.`,
     );
   }
+  if (notes.length > 0) parts.push('', ...notes);
+
   return parts.join('\n');
 }
 
@@ -243,10 +251,21 @@ function footer(input: BodyInput): string {
   return lines.join('\n');
 }
 
-function assemble(sections: string[], key: string): string {
-  const body = [marker(key), ...sections.filter((section) => section.length > 0)].join('\n\n');
-  if (body.length <= MAX_BODY) return body;
-  return `${body.slice(0, MAX_BODY - 80)}\n\n_Truncated to fit GitHub's body limit._`;
+const TRUNCATION_NOTE = "_Truncated to fit GitHub's body limit._";
+
+/**
+ * The brief is the only section that grows with its inputs, and every one of those inputs is text
+ * a package author wrote. Cutting a body from the end therefore let a long changelog decide whether
+ * the reader ever reached the footer: the rule that fired, and the sentence saying a person presses
+ * merge. The footer is measured first and always kept, so the cut lands in the material instead.
+ */
+function assemble(sections: string[], key: string, footerText: string): string {
+  const head = [marker(key), ...sections.filter((section) => section.length > 0)].join('\n\n');
+  const whole = `${head}\n\n${footerText}`;
+  if (whole.length <= MAX_BODY) return whole;
+
+  const tail = `\n\n${TRUNCATION_NOTE}\n\n${footerText}`;
+  return `${head.slice(0, MAX_BODY - tail.length)}${tail}`;
 }
 
 function evidenceSections(input: BodyInput, checklist: boolean): string[] {
@@ -254,7 +273,6 @@ function evidenceSections(input: BodyInput, checklist: boolean): string[] {
     briefSection(input.brief),
     migrationSection(input.brief, checklist),
     scoreTable(input.score),
-    footer(input),
   ];
 }
 
@@ -267,6 +285,7 @@ export function actionBody(input: BodyInput, manifestNote = ''): string {
   return assemble(
     [verdictLine(input), manifestNote, ...evidenceSections(input, checklist)],
     input.bump.key,
+    footer(input),
   );
 }
 
@@ -278,5 +297,5 @@ export function actionBody(input: BodyInput, manifestNote = ''): string {
 export function botCommentBody(input: BodyInput): string {
   const verdict = VERDICT_WORD[input.score.band].toLowerCase();
   const opener = `bumpwarden scored this bump ${input.score.total} of 100 (${verdict}) and is commenting here rather than opening a second pull request.`;
-  return assemble([opener, ...evidenceSections(input, false)], input.bump.key);
+  return assemble([opener, ...evidenceSections(input, false)], input.bump.key, footer(input));
 }
