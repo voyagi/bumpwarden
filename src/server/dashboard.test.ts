@@ -315,6 +315,12 @@ describe('the published policy', () => {
   it('says out loud that nothing is ever merged', async () => {
     expect(await text(store, '/rubric')).toContain('bumpwarden never merges');
   });
+
+  it('publishes that every brief discloses the model that wrote it', async () => {
+    const body = await text(store, '/rubric');
+    expect(body).toContain('Every brief says a model wrote it');
+    expect(body).toContain('Article 50');
+  });
 });
 
 describe('about', () => {
