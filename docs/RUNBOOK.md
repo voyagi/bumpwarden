@@ -90,8 +90,10 @@ Two credentials exist, both in Secret Manager, both read at boot only.
   the service so it reads it:
 
   ```sh
-  printf '%s' "$NEW_GEMINI_API_KEY" | gcloud secrets versions add bumpwarden-gemini-api-key --data-file=-
-  gcloud run services update bumpwarden --region europe-west1 --update-secrets GEMINI_API_KEY=bumpwarden-gemini-api-key:latest
+  GEMINI_ID=bumpwarden-gemini-api-key
+  printf '%s' "$NEW_GEMINI_API_KEY" | gcloud secrets versions add "${GEMINI_ID}" --data-file=-
+  gcloud run services update bumpwarden --region europe-west1 \
+    --update-secrets "GEMINI_API_KEY=${GEMINI_ID}:latest"
   ```
 
   Disable the old key in AI Studio after the next successful brief, not before.
