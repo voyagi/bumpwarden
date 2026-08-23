@@ -117,12 +117,19 @@ export async function probeModel(options: ModelProbeOptions): Promise<ModelProbe
       : { status: 'unreachable', model, reason: `HTTP ${response.status}` };
   }
 
-  let body: { version?: unknown; supportedGenerationMethods?: unknown };
+  let parsed: unknown;
   try {
-    body = (await response.json()) as typeof body;
+    parsed = await response.json();
   } catch (error) {
     return { status: 'unreachable', model, reason: `unreadable body: ${describe(error)}` };
   }
+
+  // `null` and a bare string are both legal JSON, and reading a field off either throws. A probe
+  // that exists to keep a bad answer from ending the boot must not be the thing that throws.
+  const body = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as {
+    version?: unknown;
+    supportedGenerationMethods?: unknown;
+  };
   const methods = Array.isArray(body.supportedGenerationMethods)
     ? body.supportedGenerationMethods
     : [];

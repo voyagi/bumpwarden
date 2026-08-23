@@ -194,6 +194,39 @@ describe('the model probe', () => {
     expect(probe).toEqual({ status: 'unreachable', model: BRIEF_MODEL, reason: 'HTTP 400' });
   });
 
+  /**
+   * Every other exit answers rather than throws, and these two are how that promise gets broken
+   * without anyone noticing: a body that is not JSON, and a body that is legal JSON but not an
+   * object. Reading a field off `null` throws, and a probe whose whole point is to keep a bad
+   * answer from ending the boot must not become the thing that ends it.
+   */
+  it('answers rather than throws when the body is not JSON at all', async () => {
+    const probe = await probeModel({
+      apiKey: 'k',
+      fetchImpl: async () => new Response('<html>a captive portal</html>', { status: 200 }),
+    });
+
+    expect(probe.status).toBe('unreachable');
+    expect(probe).toMatchObject({ reason: expect.stringContaining('unreadable body:') });
+  });
+
+  it('answers rather than throws when the body is legal JSON but not an object', async () => {
+    for (const shape of ['null', '"a string"', '42', '[]']) {
+      const probe = await probeModel({
+        apiKey: 'k',
+        fetchImpl: async () =>
+          new Response(shape, { status: 200, headers: { 'content-type': 'application/json' } }),
+      });
+
+      expect(probe).toEqual({
+        status: 'listed',
+        model: BRIEF_MODEL,
+        version: 'unknown',
+        generates: false,
+      });
+    }
+  });
+
   it('does not read a listing with no version as an answer about the model', async () => {
     const probe = await probeModel({ apiKey: 'k', fetchImpl: answering(200, { name: 'x' }) });
     expect(probe).toEqual({
