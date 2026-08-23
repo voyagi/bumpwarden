@@ -1,0 +1,29 @@
+# Suppressions for the security gate. Empty on purpose: nothing is suppressed today, and this
+# file exists so that nothing has to be invented under time pressure on the day something is.
+#
+# The gate fails the run on any HIGH or CRITICAL finding, and it does not skip a vulnerability
+# that has no fix published. That is the right default and it stays. It also means a new advisory
+# against a version already installed can turn the build red on a day when there is nothing to
+# upgrade to, including in a dependency that only ever runs on the build machine.
+#
+# When that happens, add one entry here rather than loosening the gate:
+#
+#   vulnerabilities:
+#     - id: CVE-2026-00000
+#       statement: no fixed version published, reached only by the test runner
+#       expired_at: 2026-09-30
+#
+#   misconfigurations:
+#     - id: DS-0002
+#       statement: why this one is accepted
+#       expired_at: 2026-09-30
+#
+# Three rules for an entry, none of them optional.
+#
+# 1. Every entry carries an `expired_at`. Past that date the entry stops applying and the finding
+#    comes back on its own, which is what stops a suppression from quietly becoming permanent.
+#    Verified against Trivy v0.74.0 on 2026-08-23: a future date suppresses, a past date does not.
+# 2. Every entry carries a `statement` saying why it is acceptable, in words that will still make
+#    sense to someone reading this in a month.
+# 3. Never suppress a secret finding. A credential in the source is not a risk to be accepted, it
+#    is a credential to be rotated and removed from the history.
