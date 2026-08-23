@@ -83,9 +83,12 @@ const app = createApp({
  * The model id is an alias Google can move or retire. Boot asks whether it still resolves and
  * logs the answer without spending a model request; a missing id is an error in the log, not a
  * crash, because the dashboard and the scores stand on their own and a run records the refusal.
- * It runs after the port is bound rather than before it: the probe is a network round trip with a
- * ten second ceiling, and a cold start has to answer `/healthz` and the scheduler's run without
- * waiting on Google first. Nothing reads the answer, so nothing is racing it.
+ * Nothing waits for it. The request goes out before the port is bound, so it travels while the
+ * platform still grants a starting container full processor, and the port is bound without waiting
+ * on the ten second ceiling behind it. Awaiting it would have put a cold start behind a round trip
+ * to Google; starting it after the port opened would have left it running in the window where a
+ * serverless container is throttled between requests, and timing out there would have reported an
+ * unreachable API that was never asked. Nothing reads the answer, so nothing is racing it.
  */
 async function reportModel(): Promise<void> {
   if (!env.GEMINI_API_KEY) return;
@@ -122,9 +125,9 @@ async function reportModel(): Promise<void> {
 }
 
 await seedDemoRepository();
+void reportModel();
 
 serve({ fetch: app.fetch, hostname: bindHostname(env.HOST), port: env.PORT }, (info) => {
-  void reportModel();
   log.info('listening', {
     port: info.port,
     host: env.HOST,
