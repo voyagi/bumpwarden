@@ -254,6 +254,17 @@ function footer(input: BodyInput): string {
 const TRUNCATION_NOTE = "_Truncated to fit GitHub's body limit._";
 
 /**
+ * A cut lands wherever the limit falls, which can be between the two halves of an astral character:
+ * an emoji in a changelog, or any character outside the basic plane. Half of one is a broken glyph
+ * in an issue this agent signed, so the orphaned half goes with the rest.
+ */
+function cutAt(text: string, limit: number): string {
+  const cut = text.slice(0, limit);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+}
+
+/**
  * The brief is the only section that grows with its inputs, and every one of those inputs is text
  * a package author wrote. Cutting a body from the end therefore let a long changelog decide whether
  * the reader ever reached the footer: the rule that fired, and the sentence saying a person presses
@@ -265,7 +276,7 @@ function assemble(sections: string[], key: string, footerText: string): string {
   if (whole.length <= MAX_BODY) return whole;
 
   const tail = `\n\n${TRUNCATION_NOTE}\n\n${footerText}`;
-  return `${head.slice(0, MAX_BODY - tail.length)}${tail}`;
+  return `${cutAt(head, MAX_BODY - tail.length)}${tail}`;
 }
 
 function evidenceSections(input: BodyInput, checklist: boolean): string[] {

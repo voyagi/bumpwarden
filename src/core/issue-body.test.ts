@@ -320,6 +320,32 @@ describe('the issue body', () => {
   });
 
   /**
+   * The cut lands wherever the limit falls, and a changelog is free to put an emoji there. Half an
+   * astral character is a broken glyph in an issue this agent signed, so the cut walks back off it.
+   * Nine offsets around the boundary, because emoji are two code units and only every other cut
+   * lands inside one.
+   */
+  it('never leaves half an astral character at the cut', () => {
+    // The astral run has to be long enough that the cut lands inside it rather than past it, and
+    // the ASCII prefix shifts the cut one code unit at a time: emoji are two units each, so only
+    // every other shift splits one.
+    const bodyWith = (shift: number): string => {
+      const brief = readyBrief();
+      if (!brief.content) throw new Error('the fixture lost its content');
+      brief.content.whatChanged = 'x'.repeat(shift) + '\u{1F600}'.repeat(40_000);
+      return actionBody(input({ brief }));
+    };
+
+    for (let shift = 0; shift < 4; shift += 1) {
+      const body = bodyWith(shift);
+      expect(body).toContain('Truncated');
+      expect(body.length).toBeLessThanOrEqual(MAX_BODY);
+      expect(body).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+      expect(body).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+    }
+  });
+
+  /**
    * The limit is a boundary, not a direction: a body one character over must be cut and a body
    * landing exactly on it must not be, or a legitimate changelog loses its last paragraph.
    */
