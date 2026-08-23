@@ -153,6 +153,47 @@ describe('the model probe', () => {
     // than as an unexplained "test timed out".
   }, 20_000);
 
+  /**
+   * Node reports a host with several addresses as an AggregateError whose own message is empty and
+   * whose code lives on the attempts inside it. Reading the wrapper alone gives the operator the
+   * word "fetch failed" and nothing else.
+   */
+  it('digs the code out of an aggregate error carrying no message of its own', async () => {
+    const attempt = Object.assign(new Error(''), { code: 'ENOTFOUND' });
+    const thrown = new TypeError('fetch failed', { cause: new AggregateError([attempt], '') });
+
+    const probe = await probeModel({ apiKey: 'k', fetchImpl: () => Promise.reject(thrown) });
+
+    expect(probe).toMatchObject({ status: 'unreachable', reason: 'fetch failed: ENOTFOUND' });
+  });
+
+  it('stops instead of recursing when an aggregate error contains itself', async () => {
+    const looping = new AggregateError([], '');
+    looping.errors.push(looping);
+    const thrown = new TypeError('fetch failed', { cause: looping });
+
+    const probe = await probeModel({ apiKey: 'k', fetchImpl: () => Promise.reject(thrown) });
+
+    expect(probe).toMatchObject({ status: 'unreachable' });
+    expect(probe).toHaveProperty('reason', 'fetch failed: AggregateError');
+  });
+
+  /**
+   * The reason is read out of the body, so a body that cannot be read has to fall somewhere. It
+   * falls to unreachable: a warning that says the API could not be understood is cheaper to be
+   * wrong about than an error sending an operator to rotate a key that was working.
+   */
+  it('does not call a 400 a refusal when its body cannot be read', async () => {
+    const answer = new Response(JSON.stringify({ error: { status: 'INVALID_ARGUMENT' } }), {
+      status: 400,
+    });
+    await answer.text();
+
+    const probe = await probeModel({ apiKey: 'k', fetchImpl: async () => answer });
+
+    expect(probe).toEqual({ status: 'unreachable', model: BRIEF_MODEL, reason: 'HTTP 400' });
+  });
+
   it('does not read a listing with no version as an answer about the model', async () => {
     const probe = await probeModel({ apiKey: 'k', fetchImpl: answering(200, { name: 'x' }) });
     expect(probe).toEqual({
