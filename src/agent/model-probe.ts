@@ -73,6 +73,29 @@ function pathSegment(model: string): string {
   return encodeURIComponent(model.replace(/^models\//, ''));
 }
 
+/**
+ * The reasons Google names when the credential, rather than the request, is the problem. Read off a
+ * live refusal on 2026-08-23: an invalid key is answered `400 INVALID_ARGUMENT` carrying
+ * `API_KEY_INVALID`, not the 401 the status alone would suggest. A key that exists without
+ * entitlement answers 403.
+ */
+const REFUSAL_REASONS = ['API_KEY_INVALID', 'PERMISSION_DENIED', 'ACCESS_TOKEN_EXPIRED'];
+
+/**
+ * A rejected credential is not an outage, and reading it as one is how a deployment holding the
+ * wrong key spends a whole demo recording "brief unavailable": nothing retries its way out of it,
+ * and the answer is the runbook's key rotation rather than patience. Only a 400 costs a body read,
+ * because 400 is also what a malformed request from this client would earn, and calling that a
+ * credential problem sends the operator to rotate a key that was never the matter.
+ */
+async function refusesTheKey(response: Response): Promise<boolean> {
+  if (response.status === 401 || response.status === 403) return true;
+  if (response.status !== 400) return false;
+
+  const detail = await response.text().catch(() => '');
+  return REFUSAL_REASONS.some((reason) => detail.includes(reason));
+}
+
 export async function probeModel(options: ModelProbeOptions): Promise<ModelProbe> {
   const model = options.model ?? BRIEF_MODEL;
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -87,14 +110,10 @@ export async function probeModel(options: ModelProbeOptions): Promise<ModelProbe
   }
 
   if (response.status === 404) return { status: 'missing', model };
-  // A rejected credential is not an outage, and reading it as one is how a deployment with the
-  // wrong key spends a whole demo recording "brief unavailable": nothing is retrying its way out
-  // of a 401 or a 403, and the answer is the runbook's key rotation, not patience.
-  if (response.status === 401 || response.status === 403) {
-    return { status: 'refused', model, reason: `HTTP ${response.status}` };
-  }
   if (!response.ok) {
-    return { status: 'unreachable', model, reason: `HTTP ${response.status}` };
+    return (await refusesTheKey(response))
+      ? { status: 'refused', model, reason: `HTTP ${response.status}` }
+      : { status: 'unreachable', model, reason: `HTTP ${response.status}` };
   }
 
   let body: { version?: unknown; supportedGenerationMethods?: unknown };

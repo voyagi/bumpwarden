@@ -78,6 +78,25 @@ describe('the model probe', () => {
       expect(refused).toEqual({ status: 'refused', model: BRIEF_MODEL, reason: `HTTP ${status}` });
     }
 
+    // Copied from a live refusal rather than imagined: this is the answer an invalid key really
+    // gets, and reading its status alone would file it under "the API is having a moment".
+    const invalidKey = await probeModel({
+      apiKey: 'k',
+      fetchImpl: answering(400, {
+        error: {
+          code: 400,
+          message: 'API key not valid. Please pass a valid API key.',
+          status: 'INVALID_ARGUMENT',
+          details: [
+            { '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'API_KEY_INVALID' },
+          ],
+        },
+      }),
+    });
+    expect(invalidKey).toEqual({ status: 'refused', model: BRIEF_MODEL, reason: 'HTTP 400' });
+
+    // A 400 naming no credential reason is this client's own bad request, and sending the operator
+    // to rotate a working key over it would be worse than saying nothing.
     for (const status of [400, 429, 500, 503]) {
       const other = await probeModel({ apiKey: 'k', fetchImpl: answering(status, {}) });
       expect(other).toEqual({
@@ -129,7 +148,10 @@ describe('the model probe', () => {
     // Platform-independent on purpose: the code itself differs by operating system, but a cause
     // having been unwrapped at all is what this pins.
     expect(probe).toMatchObject({ reason: expect.stringMatching(/^fetch failed: \S/) });
-  });
+    // Longer than the default: loopback normally refuses at once, but a host that drops instead of
+    // refusing takes fetch's own connect timeout, and that has to surface as this assertion rather
+    // than as an unexplained "test timed out".
+  }, 20_000);
 
   it('does not read a listing with no version as an answer about the model', async () => {
     const probe = await probeModel({ apiKey: 'k', fetchImpl: answering(200, { name: 'x' }) });
