@@ -137,9 +137,11 @@ export function PolicyPage(): JSX.Element {
               acting on it. The same body carries a marker a machine can read.
             </p>
             <p style="margin-bottom:0">
-              That is what Article 50 of the EU AI Act asks of machine-written text, and it would be
-              owed to the reader without it. The score and the verdict are not the model's: they
-              come from the rubric above.
+              Article 50 of the EU AI Act asks that machine-written text be recognisable as such, by
+              the person reading it and by a machine, and that is where the shape of this came from.
+              It is offered as a plain practice rather than as a claim to have met a legal test,
+              which is not ours to declare. The score and the verdict are not the model's: they come
+              from the rubric above.
             </p>
           </div>
         </div>
