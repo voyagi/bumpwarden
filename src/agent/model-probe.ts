@@ -93,27 +93,42 @@ function resourcePath(model: string): string {
 }
 
 /**
- * The one reason a 400 gives when the credential, rather than the request, is the problem. Read off
- * a live refusal on 2026-08-23: an invalid key is answered `400 INVALID_ARGUMENT` carrying
- * `API_KEY_INVALID` in the error details, not the 401 the status alone would suggest. A key that
- * exists without entitlement answers 403 and an expired one 401, so neither needs its body read,
- * and listing their reasons here would only be a test that can never come out true.
+ * The reason that turns a 400 from this client's own bad request into a rejected credential. Read
+ * off a live refusal on 2026-08-23: an invalid key is answered `400 INVALID_ARGUMENT` carrying
+ * `API_KEY_INVALID` in the error details, not the 401 the status alone would suggest. 401 and 403
+ * need no reason to be read as refusals, since nothing else answers with them here; their bodies
+ * are still read, because which refusal it is decides what an operator should do about it.
  */
 const KEY_REJECTED = 'API_KEY_INVALID';
 
+/** Google's own reason names are a fixed vocabulary, so only that shape is ever repeated into a log. */
+const REASON_NAME = /"reason"\s*:\s*"([A-Z][A-Z0-9_]{2,63})"/;
+
+interface Refusal {
+  refused: boolean;
+  /** The reason the API named, when it named one this shape recognises. */
+  named: string | null;
+}
+
 /**
  * A rejected credential is not an outage, and reading it as one is how a deployment holding the
- * wrong key spends a whole demo recording "brief unavailable": nothing retries its way out of it,
- * and the answer is the runbook's key rotation rather than patience. Only a 400 costs a body read,
- * because 400 is also what a malformed request from this client would earn, and calling that a
- * credential problem sends the operator to rotate a key that was never the matter.
+ * wrong key spends a whole demo recording "brief unavailable": nothing retries its way out of it.
+ * What to DO about it is not always the same, though, which is why the API's own reason is carried
+ * rather than guessed: a 403 can equally mean the key is fine and the API is disabled, or billing,
+ * or an organisation policy, and rotating a working key fixes none of those.
+ *
+ * A 400 is the one status that needs its body before the question can be answered at all, because
+ * 400 is also what a malformed request from this client would earn, and calling that a credential
+ * problem sends an operator to rotate a key that was never the matter.
  */
-async function refusesTheKey(response: Response): Promise<boolean> {
-  if (response.status === 401 || response.status === 403) return true;
-  if (response.status !== 400) return false;
+async function refusesTheKey(response: Response): Promise<Refusal> {
+  const unauthorised = response.status === 401 || response.status === 403;
+  if (!unauthorised && response.status !== 400) return { refused: false, named: null };
 
   const detail = await response.text().catch(() => '');
-  return detail.includes(KEY_REJECTED);
+  const named = REASON_NAME.exec(detail)?.[1] ?? null;
+
+  return { refused: unauthorised || detail.includes(KEY_REJECTED), named };
 }
 
 export async function probeModel(options: ModelProbeOptions): Promise<ModelProbe> {
@@ -131,9 +146,13 @@ export async function probeModel(options: ModelProbeOptions): Promise<ModelProbe
 
   if (response.status === 404) return { status: 'missing', model };
   if (!response.ok) {
-    return (await refusesTheKey(response))
-      ? { status: 'refused', model, reason: `HTTP ${response.status}` }
-      : { status: 'unreachable', model, reason: `HTTP ${response.status}` };
+    const refusal = await refusesTheKey(response);
+    const reason = refusal.named
+      ? `HTTP ${response.status} ${refusal.named}`
+      : `HTTP ${response.status}`;
+    return refusal.refused
+      ? { status: 'refused', model, reason }
+      : { status: 'unreachable', model, reason };
   }
 
   let parsed: unknown;
@@ -143,12 +162,13 @@ export async function probeModel(options: ModelProbeOptions): Promise<ModelProbe
     return { status: 'unreachable', model, reason: `unreadable body: ${describe(error)}` };
   }
 
-  // `null` and a bare string are both legal JSON, and reading a field off either throws. A probe
-  // that exists to keep a bad answer from ending the boot must not be the thing that throws.
-  const body = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as {
-    version?: unknown;
-    supportedGenerationMethods?: unknown;
-  };
+  // `null`, a bare string and an array are all legal JSON and none of them is a model resource.
+  // Reading a field off them either throws or quietly answers undefined, and answering "listed"
+  // to something this file could not understand would be a success report about an unread answer.
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { status: 'unreachable', model, reason: 'unreadable body: not a model resource' };
+  }
+  const body = parsed as { version?: unknown; supportedGenerationMethods?: unknown };
   const methods = Array.isArray(body.supportedGenerationMethods)
     ? body.supportedGenerationMethods
     : [];

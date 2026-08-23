@@ -111,7 +111,11 @@ describe('the model probe', () => {
         },
       }),
     });
-    expect(invalidKey).toEqual({ status: 'refused', model: BRIEF_MODEL, reason: 'HTTP 400' });
+    expect(invalidKey).toEqual({
+      status: 'refused',
+      model: BRIEF_MODEL,
+      reason: 'HTTP 400 API_KEY_INVALID',
+    });
 
     // A 400 naming no credential reason is this client's own bad request, and sending the operator
     // to rotate a working key over it would be worse than saying nothing.
@@ -243,7 +247,12 @@ describe('the model probe', () => {
     expect(probe).toMatchObject({ reason: expect.stringContaining('unreadable body:') });
   });
 
-  it('answers rather than throws when the body is legal JSON but not an object', async () => {
+  /**
+   * Legal JSON that is not a model resource is an answer this file could not read, and reporting
+   * a listed model on the strength of it would be a success report about something unread. It
+   * belongs with the other unknowns, not with the successes.
+   */
+  it('answers rather than throws when the body is legal JSON but not a model resource', async () => {
     for (const shape of ['null', '"a string"', '42', '[]']) {
       const probe = await probeModel({
         apiKey: 'k',
@@ -252,12 +261,43 @@ describe('the model probe', () => {
       });
 
       expect(probe).toEqual({
-        status: 'listed',
+        status: 'unreachable',
         model: BRIEF_MODEL,
-        version: 'unknown',
-        generates: false,
+        reason: 'unreadable body: not a model resource',
       });
     }
+  });
+
+  /**
+   * A 403 is not always a key to rotate: the same status covers a disabled API, a billing problem
+   * and an organisation policy, and the runbook's answer to a refusal is rotation. So the reason
+   * the API named travels with it rather than being guessed from the status.
+   */
+  it('carries the reason the API named, and only in the shape a reason comes in', async () => {
+    const withReason = async (status: number, reason: string): Promise<unknown> =>
+      probeModel({
+        apiKey: 'k',
+        fetchImpl: answering(status, { error: { code: status, details: [{ reason }] } }),
+      });
+
+    expect(await withReason(403, 'SERVICE_DISABLED')).toEqual({
+      status: 'refused',
+      model: BRIEF_MODEL,
+      reason: 'HTTP 403 SERVICE_DISABLED',
+    });
+
+    expect(await withReason(400, 'API_KEY_INVALID')).toEqual({
+      status: 'refused',
+      model: BRIEF_MODEL,
+      reason: 'HTTP 400 API_KEY_INVALID',
+    });
+
+    // Free-form text is not a reason name and must never reach the log as one.
+    const prose = await probeModel({
+      apiKey: 'k',
+      fetchImpl: answering(403, { error: { details: [{ reason: 'anything at all' }] } }),
+    });
+    expect(prose).toEqual({ status: 'refused', model: BRIEF_MODEL, reason: 'HTTP 403' });
   });
 
   it('does not read a listing with no version as an answer about the model', async () => {

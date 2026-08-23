@@ -21,9 +21,11 @@ Put the name from the first command where `REVISION` is. This takes seconds and 
 A run that was in progress on the old revision is cut off, and the next scheduled run starts
 clean, because a run's lease expires after 20 minutes on its own.
 
-Roll back when a deploy breaks a page, when `model missing` appears at boot (see section 3), or
-when a run starts failing right after a deploy. Do not roll back for a quota refusal: that is
-section 4.
+Roll back when a deploy breaks a page, or when a run starts failing right after a deploy. Do not
+roll back for a quota refusal: that is section 4. Do not roll back for `model missing` either
+unless the deploy you are rolling back is the one that changed `BRIEF_MODEL`: if Google retired
+the id, every older revision names the same one and fails the same way, and the answer is to move
+forward (section 3).
 
 ## 2. Data rollback (Firestore), stated separately
 
@@ -36,14 +38,20 @@ What that means, honestly:
 - Runs, bumps and briefs are rebuilt from their sources. The next run re-reads GitHub, the npm
   registry and deps.dev, re-scores every bump, and re-uses a ready brief from the store or asks
   the model again. A lost bump costs one run, a lost brief costs two model requests.
-- The audit log (the `actions` collection) is the one thing a run does not recreate. If it is
-  lost, the issues and pull requests on GitHub still carry every action's marker and body, so the
-  history is recoverable by reading, not by a command.
+- The audit log (the `actions` collection) is the one thing a run does not recreate, and it is the
+  one loss that is partly permanent. Actions that reached GitHub can be read back off the issues,
+  pull requests and comments that still carry their marker and body, so far as nobody has edited
+  or deleted those. Actions recorded as dry runs never reached GitHub at all, by definition, so
+  nothing outside Firestore holds them. Export the collection if you need the log to be complete.
 - The watched-repositories list is seeded at boot from `DEMO_REPO`. Any repository you added with
   `npm run watch` has to be added again.
 - A stuck run (`409` on "Run now", `run started` with no `run finished`) holds the lease document
-  `locks/run`. Wait 20 minutes or delete that one document in the console. Never delete the
-  `runs` collection to free a run.
+  `locks/run`. **Wait for it to expire.** Twenty minutes is the whole remedy, and it is the safe
+  one. Deleting the lease by hand only looks faster: moving traffic to another revision does not
+  end a request already running on the old one, so a run you assumed was dead can still be writing
+  to Firestore and posting to GitHub, and a second run started against a freed lease would be
+  doing the same work beside it. Delete the document only once you know the execution that took
+  it is gone. Never delete the `runs` collection to free a run.
 
 If you ever need more than this, turn on point-in-time recovery in the console before the
 incident, not after, and accept that it is billed.
@@ -65,11 +73,17 @@ describe bumpwarden --region europe-west1` says which. A deleted service is re-c
 - **`model missing` in the boot log.** The model id no longer resolves. Move `BRIEF_MODEL` in
   `src/core/stack.ts` to the current id, re-pin it in `docs/adr/0001-stack.md`, deploy. Until
   then every brief records "unavailable" and the scores still stand.
-- **`model refused the key` in the boot log.** The API rejected the credential, not the model.
-  Nothing retries its way out of this and every brief in every run will record "unavailable", so
-  treat it as an outage of the explanation half: rotate the key with section 5, then restart. The
-  usual causes are a key deleted in AI Studio, a key from the wrong Google project, and a secret
-  version added without the service being updated to read it.
+- **`model refused the key` in the boot log.** The API rejected the request on the credential, not
+  on the model. Nothing retries its way out of this and every brief in every run will record
+  "unavailable", so treat it as an outage of the explanation half. **Read the reason on the line
+  before deciding what to do**, because the same refusal covers more than one cause and only some
+  of them are the key's fault. `API_KEY_INVALID` is a key deleted in AI Studio, a key from the
+  wrong Google project, or a secret version added without the service being updated to read it:
+  rotate with section 5, then restart. A reason naming the service, the project or billing
+  (`SERVICE_DISABLED`, `PERMISSION_DENIED`, `CONSUMER_INVALID`) is not fixed by rotating anything;
+  the key is fine and the project's access to the API is not. A bare `HTTP 403` with no reason
+  named means the API refused without saying why: check the project in the console before touching
+  the key.
 - **`model not checked` in the boot log.** The probe could not reach the API at all, which says
   nothing about the model. It is a warning rather than an error for that reason. If it repeats on
   every cold start, read the reason it names: a code such as `ENOTFOUND` or `ECONNREFUSED` points
@@ -77,15 +91,15 @@ describe bumpwarden --region europe-west1` says which. A deleted service is re-c
 
 ## 4. External dependencies, and how each one fails
 
-| Dependency                      | Used for                                                            | When it fails, the run ...                                                                                                                                                                  |
-| ------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub REST API                 | manifests, lockfiles, releases, tag compares, issues, pull requests | records the missing source on the bump, scores what it has, and keeps going. A write refused for scope is recorded as a dry run                                                             |
-| npm registry                    | versions, publish times                                             | reads the two version documents first and the whole list last, and records a gap over the 24 MB cap                                                                                         |
-| deps.dev                        | publish times, advisories, deprecation                              | falls back to the registry for time, and records the missing advisory read                                                                                                                  |
-| Gemini API (`gemini-3.5-flash`) | the brief                                                           | paces itself under 5 requests a minute and about 20 a day, waits the time a refusal names, and records "brief unavailable" with the reason after one retry. The verdict never depends on it |
-| Cloud Scheduler                 | the twice-daily trigger                                             | nothing runs until the job is back. "Run now" on the demo project still works                                                                                                               |
-| Firestore                       | all state                                                           | the run fails at its first write and says so. Nothing is half-written: the run record is written before the work                                                                            |
-| Secret Manager                  | the two credentials at boot                                         | the service does not start. Check the two IAM grants in the README's step 5                                                                                                                 |
+| Dependency                      | Used for                                                            | When it fails, the run ...                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GitHub REST API                 | manifests, lockfiles, releases, tag compares, issues, pull requests | records the missing source on the bump, scores what it has, and keeps going. A write refused for scope is recorded as a dry run                                                                                                                                                                                                                        |
+| npm registry                    | versions, publish times                                             | reads the two version documents first and the whole list last, and records a gap over the 24 MB cap                                                                                                                                                                                                                                                    |
+| deps.dev                        | publish times, advisories, deprecation                              | falls back to the registry for time, and records the missing advisory read                                                                                                                                                                                                                                                                             |
+| Gemini API (`gemini-3.5-flash`) | the brief                                                           | paces itself under 5 requests a minute and about 20 a day, waits the time a refusal names, and records "brief unavailable" with the reason after one retry. The verdict never depends on it                                                                                                                                                            |
+| Cloud Scheduler                 | the twice-daily trigger                                             | nothing runs until the job is back. "Run now" on the demo project still works                                                                                                                                                                                                                                                                          |
+| Firestore                       | all state                                                           | the run fails at its write and says so. The run record is written before the work, so a run that began is always on record; a failure partway leaves the bumps already written, which the next run re-reads and re-scores. Ordering is not atomicity: a GitHub write followed by a failed state write can leave the two disagreeing until the next run |
+| Secret Manager                  | the two credentials at boot                                         | the service does not start. Check the two IAM grants in the README's step 5                                                                                                                                                                                                                                                                            |
 
 The free tier's daily model allowance is the dependency most likely to fail on a demo day: a
 fresh run over the seven demo bumps spends 14 of the 20 requests, a repeat run over unchanged

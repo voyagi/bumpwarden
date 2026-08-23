@@ -36,12 +36,16 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Advisories are published against versions already installed, so a scan that only
-      # ever ran at commit time would read clean on a quiet repository forever. This job fails
-      # on a HIGH or CRITICAL finding in the lockfile (dev dependencies included, they run on
-      # the build machine), in the Dockerfile, or on a credential committed into source.
-      # demo/ is another repository's deliberately stale tree and is skipped on purpose.
+      # Fails the run on a HIGH or CRITICAL finding in the lockfile (dev dependencies included,
+      # they run on the build machine), in the Dockerfile, or on a credential committed into
+      # source. demo/ is another repository's deliberately stale tree and is skipped on purpose.
       # The action and the scanner are both pinned: a mutable tag can be repointed by its owner.
+      #
+      # It runs when the code changes, and on request. It is deliberately NOT on a timer, so it
+      # says nothing about a quiet repository: advisories are published against versions already
+      # installed, and one published after the last commit here goes unnoticed until the next
+      # push or a manual run. Use the run button after a quiet stretch rather than reading a green
+      # history as an all-clear.
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
           # There is no input for this, so it goes through the scanner's own environment.

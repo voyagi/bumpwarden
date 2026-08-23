@@ -64,13 +64,19 @@ over a dated id because the free tier and the documentation follow the alias.
 
 How drift is noticed, in order of cost:
 
-- At boot, once the port is bound, the service asks the API whether the exact id still resolves.
-  It logs `model listed` with the version it found, `model missing` when the id is gone,
-  `model refused the key` when the credential rather than the model was rejected, or
-  `model not checked` when the API could not be reached at all. This spends no model request,
-  which matters on a free tier that answers twenty a day and pays one for every cold start
-  otherwise. A listing is not proof the model answers, and the check runs after the port is bound
-  so a cold start never waits on it.
+- At boot the service asks the API whether the exact id still resolves. It logs `model listed`
+  with the version it found, `model missing` when the id is gone, `model refused the key` when the
+  credential rather than the model was rejected, or `model not checked` when the API could not be
+  reached or its answer could not be read. This spends no model request, which matters on a free
+  tier that answers twenty a day and pays one for every cold start otherwise. A listing is not
+  proof the model answers.
+
+  The request is sent before the port is bound and is never awaited: it goes out while a starting
+  container still has full processor, and the port opens without waiting behind it. Nothing reads
+  the answer. On a platform that throttles a container between requests the answer can arrive late
+  or, at worst, time out into `model not checked`, which is the accepted price of a boot that does
+  not wait on Google.
+
 - The first brief of a run is the real call. A refusal is recorded on the bump with the reason the
   API gave, never as a silent gap.
 - `npm run smoke:brief` is the operator's proof of life before a demo or a deploy: one real brief,
