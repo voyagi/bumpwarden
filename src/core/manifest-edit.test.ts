@@ -29,6 +29,58 @@ describe('bumping a manifest range', () => {
     expect(bumpManifestRange(MANIFEST_JSON, 'not-installed', '1.0.0')).toBeNull();
   });
 
+  /**
+   * The same name sits beside a semver string in several other places a manifest allows, and every
+   * one of them is somebody's deliberate pin. A pull request that says it moves one dependency has
+   * no business moving a resolution, an override, or another tool's setting on the way past.
+   */
+  describe('outside the dependency sections', () => {
+    const MANIFEST = [
+      '{',
+      '  "name": "demo",',
+      '  "nx": {',
+      '    "dependencies": {',
+      '      "express": "^1.0.0"',
+      '    }',
+      '  },',
+      '  "dependencies": {',
+      '    "express": "^4.18.2"',
+      '  },',
+      '  "devDependencies": {',
+      '    "express": "^4.18.2"',
+      '  },',
+      '  "overrides": {',
+      '    "express": "^4.18.2"',
+      '  },',
+      '  "resolutions": {',
+      '    "express": "4.18.2"',
+      '  },',
+      '  "someTool": {',
+      '    "express": "^4.18.2"',
+      '  }',
+      '}',
+    ].join('\n');
+
+    const edited = bumpManifestRange(MANIFEST, 'express', '5.0.0');
+
+    it('changes the declared ranges and nothing else', () => {
+      expect(edited?.occurrences).toBe(2);
+      expect(edited?.text.match(/"express": "\^5\.0\.0"/g)).toHaveLength(2);
+    });
+
+    it.each([
+      ['an override', '"overrides": {\n    "express": "^4.18.2"'],
+      ['a resolution', '"resolutions": {\n    "express": "4.18.2"'],
+      ["another tool's setting", '"someTool": {\n    "express": "^4.18.2"'],
+      [
+        'a nested section of the same name',
+        '"nx": {\n    "dependencies": {\n      "express": "^1.0.0"',
+      ],
+    ])('leaves %s alone', (_label, untouched) => {
+      expect(edited?.text).toContain(untouched);
+    });
+  });
+
   const unsupported: Array<[string, string]> = [
     ['a git url', '"pkg": "github:owner/repo#v1"'],
     ['a workspace protocol', '"pkg": "workspace:*"'],
