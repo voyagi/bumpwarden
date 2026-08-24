@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+.git
+.github
+.env
+.env.*
+!.env.example
+design
+demo
+docs
+scripts
+firebase.json
+*.md
+**/*.test.ts
+**/*.test.tsx

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bumpwarden - express 4.18.2 to 5.2.1</title>
+    <link rel="stylesheet" href="../../public/bumpwarden.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <a class="logo" href="home.html">bumpwarden</a>
+      <nav>
+        <a href="home.html">Home</a>
+        <a href="project.html" aria-current="page">Queue</a>
+        <a href="audit.html">Audit</a>
+        <a href="rubric.html">Rubric</a>
+        <a href="about.html">About</a>
+      </nav>
+      <span class="right">rubric v1.0.0 &middot; scored 2026-08-20 18:02</span>
+    </header>
+
+    <section class="band">
+      <p class="crumb">bumpwarden-demo-app / express</p>
+      <h1>express 4.18.2 to 5.2.1</h1>
+      <p class="lede">
+        Scored 62 of 100, which is held. Every factor below is computed from a source you can open,
+        and the sum decides the band. Nothing here is a judgement call.
+      </p>
+    </section>
+
+    <section class="spread">
+      <h2>Where this sits</h2>
+      <p class="note">The same axis as the queue, so this bump's place in the run is legible.</p>
+      <div class="axis-scroll">
+        <div class="axis">
+          <div class="track"></div>
+          <div class="thr" style="left: 30%"><span>30</span></div>
+          <div class="thr" style="left: 61%"><span>61</span></div>
+          <div class="pin lane-a" style="left: 62%">
+            <i style="background: var(--r4)"></i><b>express 62</b>
+          </div>
+          <div class="pin lane-b" style="left: 12%">
+            <i style="background: var(--r0)"></i><b>hono 12</b>
+          </div>
+          <div class="pin lane-b" style="left: 44%">
+            <i style="background: var(--r2)"></i><b>dotenv 44</b>
+          </div>
+          <div class="pin lane-b" style="left: 91%">
+            <i style="background: var(--r4)"></i><b>glob 87</b>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="foot" style="margin-top: 26px">
+      <div class="card">
+        <p class="kick">Machine explanation, not verdict</p>
+        <h3>Two removed methods are called in your routes</h3>
+        <p>
+          Express 5 drops methods Express 4 accepted. Neither fails at boot: they throw the first
+          time the route is hit, so the bump looks clean until a request arrives.
+        </p>
+
+        <div class="claim">
+          <p class="c1"><code>src/routes/files.ts:18</code> calls <code>res.sendfile</code></p>
+          <p class="c2">
+            "The <code>res.sendfile()</code> function has been replaced by a camel-cased version
+            <code>res.sendFile()</code>."
+            <a class="src" href="https://expressjs.com/en/guide/migrating-5.html">
+              expressjs.com migration guide
+            </a>
+          </p>
+        </div>
+        <div class="claim">
+          <p class="c1"><code>src/routes/docs.ts:7</code> calls <code>app.del</code></p>
+          <p class="c2">
+            "Express 5 no longer supports the <code>app.del()</code> function."
+            <a class="src" href="https://expressjs.com/en/guide/migrating-5.html">
+              expressjs.com migration guide
+            </a>
+          </p>
+        </div>
+
+        <p style="margin-top: 18px">
+          <strong style="font-weight: 700">Migration.</strong> Rename line 18 to
+          <code>res.sendFile</code>, change line 7 to <code>app.delete</code>, then run the route
+          tests. Confidence high: both symbols are named in the guide and matched in your code by
+          name, not inferred.
+        </p>
+      </div>
+
+      <div>
+        <div class="card">
+          <p class="kick">How 62 was reached</p>
+          <div class="fall">
+            <div class="f">
+              <span>Semver distance, one major</span><b>30</b>
+              <i style="width: 66%; background: var(--r3)"></i>
+            </div>
+            <div class="f">
+              <span>Your code uses a changed symbol</span><b>20</b>
+              <i style="width: 44%; background: var(--r3)"></i>
+            </div>
+            <div class="f">
+              <span>Breaking marker in the notes</span><b>12</b>
+              <i style="width: 26%; background: var(--r3)"></i>
+            </div>
+            <div class="f z"><span>Release age, 263 days</span><b>0</b><i></i></div>
+            <div class="f z"><span>Advisories on the candidate</span><b>0</b><i></i></div>
+            <div class="f z"><span>Engine range</span><b>0</b><i></i></div>
+            <div class="f z"><span>Deprecation</span><b>0</b><i></i></div>
+            <div class="f z"><span>Peer dependency range</span><b>0</b><i></i></div>
+          </div>
+          <div class="total"><span>Total</span><span>62</span></div>
+        </div>
+
+        <div class="card" style="margin-top: 20px">
+          <p class="kick">What was done</p>
+          <div class="fall">
+            <div class="f" style="grid-template-columns: 1fr auto">
+              <span>Updated hold issue 38</span><b>06:03</b>
+            </div>
+            <div class="f" style="grid-template-columns: 1fr auto">
+              <span>Opened hold issue 38</span><b>18:02</b>
+            </div>
+            <div class="f z" style="grid-template-columns: 1fr auto">
+              <span>Scored 62, rubric v1.0.0</span><b>18:02</b>
+            </div>
+          </div>
+          <p style="margin-top: 14px; font-size: 13.5px">
+            Rule <span class="chip">RED-HOLD-1</span> opens a hold issue with a migration plan and
+            applies the bumpwarden:hold label. It does not open a pull request.
+          </p>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>

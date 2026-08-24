@@ -1,0 +1,72 @@
+{
+  "name": "bumpwarden",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Background agent that watches dependency releases, scores break risk with a published rubric, explains what breaks in your code, and acts on GitHub.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24.13.0"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/server/index.tsx",
+    "smoke:brief": "tsx --env-file-if-exists=.env src/smoke/main.ts",
+    "emulator": "firebase emulators:start --only firestore --project demo-bumpwarden",
+    "demo:check": "tsx --env-file-if-exists=.env src/tools/demo/main.ts",
+    "watch": "tsx --env-file-if-exists=.env src/tools/watch/main.ts",
+    "dryrun": "tsx --env-file-if-exists=.env src/tools/dryrun/main.ts",
+    "docs:diagram": "tsx src/tools/diagram/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.include=\"src/**/*.{ts,tsx}\" --coverage.exclude=\"src/**/*.test.{ts,tsx}\" --coverage.exclude=\"src/testkit/**\" --coverage.reporter=text --coverage.reporter=json-summary",
+    "mutate": "stryker run",
+    "lint": "eslint .",
+    "format": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude",
+    "format:write": "prettier --write . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude",
+    "gate:types": "tsc --noEmit -p tsconfig.json",
+    "gate:complexity": "eslint .",
+    "gate:dup": "jscpd .",
+    "gate:deps": "depcruise src --config .dependency-cruiser.cjs",
+    "gate:precommit": "eslint . && jscpd .",
+    "gate": "npm run gate:types && npm run gate:complexity && npm run gate:dup && npm run gate:deps",
+    "verify:ship": "node verify-ship.mjs"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^9.0.0",
+    "@google/adk": "^1.6.0",
+    "@google/genai": "^2.17.1",
+    "@hono/node-server": "^2.1.1",
+    "@octokit/rest": "^22.0.1",
+    "@t3-oss/env-core": "^0.13.11",
+    "google-auth-library": "^11.0.2",
+    "hono": "^4.13.2",
+    "semver": "^7.8.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
+    "@types/node": "^24.13.3",
+    "@types/semver": "^7.8.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "axe-core": "^4.13.0",
+    "dependency-cruiser": "^18.2.0",
+    "eslint": "^10.8.1",
+    "eslint-plugin-sonarjs": "^4.2.0",
+    "fast-check": "^4.9.0",
+    "globals": "^17.11.0",
+    "jscpd": "^5.0.15",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.12",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "adm-zip": "^0.6.0",
+    "tar": "^7.5.22"
+  }
+}

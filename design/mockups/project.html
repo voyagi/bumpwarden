@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bumpwarden - bumpwarden-demo-app</title>
+    <link rel="stylesheet" href="../../public/bumpwarden.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <a class="logo" href="home.html">bumpwarden</a>
+      <nav>
+        <a href="home.html">Home</a>
+        <a href="project.html" aria-current="page">Queue</a>
+        <a href="audit.html">Audit</a>
+        <a href="rubric.html">Rubric</a>
+        <a href="about.html">About</a>
+      </nav>
+      <span class="right">rubric v1.0.0 &middot; next run 18:00 UTC</span>
+    </header>
+
+    <section class="band">
+      <p class="crumb">bumpwarden-demo-app &middot; main &middot; last run 06:00 UTC in 1.9s</p>
+      <h1>Ten bumps, scored on one scale you can read.</h1>
+      <p class="lede">
+        The score is arithmetic from a published rubric, not an opinion. The model reads the release
+        notes and explains what breaks in your code. It never moves the number and it never merges.
+      </p>
+      <p style="margin-top: 20px"><button class="btn">Run now</button></p>
+    </section>
+
+    <section class="spread">
+      <h2>This run, placed on the rubric</h2>
+      <p class="note">
+        Every pending bump on the same 0 to 100 axis, so the shape of the run is visible before you
+        read a single row.
+      </p>
+      <div class="axis-scroll">
+        <div class="axis">
+          <div class="track"></div>
+          <div class="thr" style="left: 30%"><span>30</span></div>
+          <div class="thr" style="left: 61%"><span>61</span></div>
+
+          <div class="pin lane-a" style="left: 0.5%">
+            <i style="background: var(--r0)"></i><b>zod</b>
+          </div>
+          <div class="pin lane-b" style="left: 4%">
+            <i style="background: var(--r0)"></i><b>pino</b>
+          </div>
+          <div class="pin lane-a" style="left: 12%">
+            <i style="background: var(--r0)"></i><b>hono</b>
+          </div>
+          <div class="pin lane-a" style="left: 44%">
+            <i style="background: var(--r2)"></i><b>dotenv</b>
+          </div>
+          <div class="pin lane-b" style="left: 50%">
+            <i style="background: var(--r2)"></i><b>undici</b>
+          </div>
+          <div class="pin lane-a" style="left: 56%">
+            <i style="background: var(--r2)"></i><b>node-fetch</b>
+          </div>
+          <div class="pin lane-b" style="left: 66%">
+            <i style="background: var(--r4)"></i><b>express</b>
+          </div>
+          <div class="pin lane-a" style="left: 74%">
+            <i style="background: var(--r4)"></i><b>commander</b>
+          </div>
+          <div class="pin lane-b" style="left: 83%">
+            <i style="background: var(--r4)"></i><b>chalk</b>
+          </div>
+          <div class="pin lane-a" style="left: 91%">
+            <i style="background: var(--r4)"></i><b>glob</b>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="list">
+      <div class="lh">
+        <span>Dependency</span><span>Move</span><span>Why</span><span>Score</span>
+      </div>
+
+      <a class="r" href="bump.html">
+        <span class="nm">glob</span><span class="mv"><b>8.1.0</b> &rarr; <b>13.0.6</b></span>
+        <span class="wy">Installed version deprecated, five majors behind</span>
+        <span class="g"
+          ><span class="n">87</span
+          ><span class="t"
+            ><i style="width: 87%; background: var(--r4)"></i><u style="left: 30%"></u
+            ><u style="left: 61%"></u></span
+          ><span class="w" style="color: var(--r4)">Held</span></span
+        >
+      </a>
+      <a class="r" href="bump.html">
+        <span class="nm">chalk</span><span class="mv"><b>4.1.2</b> &rarr; <b>6.0.0</b></span>
+        <span class="wy">ESM only since 5, candidate needs Node 22</span>
+        <span class="g"
+          ><span class="n">83</span
+          ><span class="t"
+            ><i style="width: 83%; background: var(--r4)"></i><u style="left: 30%"></u
+            ><u style="left: 61%"></u></span
+          ><span class="w" style="color: var(--r4)">Held</span></span
+        >
+      </a>
+      <a class="r" href="bump.html">
+        <span class="nm">commander</span><span class="mv"><b>11.1.0</b> &rarr; <b>15.0.0</b></span>
+        <span class="wy">Four majors, candidate needs Node 22.12</span>
+        <span class="g"
+          ><span class="n">74</span
+          ><span class="t"
+            ><i style="width: 74%; background: var(--r4)"></i><u style="left: 30%"></u
+            ><u style="left: 61%"></u></span
+          ><span class="w" style="color: var(--r4)">Held</span></span
+        >
+      </a>
+      <a class="r" href="bump.html">
+        <span class="nm">express</span><span class="mv"><b>4.18.2</b> &rarr; <b>5.2.1</b></span>
+        <span class="wy">Two removed methods are called in your routes</span>
+        <span class="g"
+          ><span class="n">62</span
+          ><span class="t"
+            ><i style="width: 62%; background: var(--r4)"></i><u style="left: 30%"></u
+            ><u style="left: 61%"></u></span
+          ><span class="w" style="color: var(--r4)">Held</span></span
+        >
+      </a>
+      <a class="r" href="bump.html">
+        <span class="nm">node-fetch</span><span class="mv"><b>2.7.0</b> &rarr; <b>3.3.2</b></span>
+        <span class="wy">ESM only since 3, you already import it dynamically</span>
+        <span class="g"
+          ><span class="n">50</span
+          ><span class="t"
+            ><i style="width: 50%; background: var(--r2)"></i><u style="left: 30%"></u
+            ><u style="left: 61%"></u></span
+          ><span class="w" style="color: var(--r3)">Caution</span></span
+        >
+      </a>
+      <a class="r" href="bump.html">
+        <span class="nm">undici</span><span class="mv"><b>6.27.0</b> &rarr; <b>8.10.0</b></span>
+        <span class="wy">Two majors, no changed symbol in your imports</span>
+        <span class="g"
+          ><span class="n">50</span
+          ><span class="t"
+            ><i style="width: 50%; background: var(--r2)"></i><u style="left: 30%"></u
+            ><u style="left: 61%"></u></span
+          ><span class="w" style="color: var(--r3)">Caution</span></span
+        >
+      </a>
+      <a class="r" href="bump.html">
+        <span class="nm">dotenv</span><span class="mv"><b>16.4.5</b> &rarr; <b>17.4.2</b></span>
+        <span class="wy">One major, loader behaviour changed</span>
+        <span class="g"
+          ><span class="n">44</span
+          ><span class="t"
+            ><i style="width: 44%; background: var(--r2)"></i><u style="left: 30%"></u
+            ><u style="left: 61%"></u></span
+          ><span class="w" style="color: var(--r3)">Caution</span></span
+        >
+      </a>
+      <a class="r" href="bump.html">
+        <span class="nm">hono</span><span class="mv"><b>4.13.1</b> &rarr; <b>4.13.3</b></span>
+        <span class="wy">Patch, but the candidate is three days old</span>
+        <span class="g"
+          ><span class="n">12</span
+          ><span class="t"
+            ><i style="width: 12%; background: var(--r0)"></i><u style="left: 30%"></u
+            ><u style="left: 61%"></u></span
+          ><span class="w" style="color: var(--r0)">Clear</span></span
+        >
+      </a>
+      <a class="r" href="bump.html">
+        <span class="nm">zod</span><span class="mv"><b>4.4.2</b> &rarr; <b>4.4.3</b></span>
+        <span class="wy">Patch, no factor fired</span>
+        <span class="g"
+          ><span class="n">0</span
+          ><span class="t"
+            ><i style="width: 1.5%; background: var(--r0)"></i><u style="left: 30%"></u
+            ><u style="left: 61%"></u></span
+          ><span class="w" style="color: var(--r0)">Clear</span></span
+        >
+      </a>
+      <a class="r" href="bump.html">
+        <span class="nm">pino</span><span class="mv"><b>10.3.0</b> &rarr; <b>10.3.1</b></span>
+        <span class="wy">Patch, no factor fired</span>
+        <span class="g"
+          ><span class="n">0</span
+          ><span class="t"
+            ><i style="width: 1.5%; background: var(--r0)"></i><u style="left: 30%"></u
+            ><u style="left: 61%"></u></span
+          ><span class="w" style="color: var(--r0)">Clear</span></span
+        >
+      </a>
+    </section>
+  </body>
+</html>

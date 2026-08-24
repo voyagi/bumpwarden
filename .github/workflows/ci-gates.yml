@@ -1,0 +1,80 @@
+name: gates
+on:
+  pull_request:
+  # Only the default branch. A push to a branch that has a pull request open already fires the
+  # pull_request run above, and the two events land in different concurrency groups, so running
+  # both meant six jobs for one commit and neither cancelling the other. The cost of narrowing it
+  # is that a branch with no pull request open gets no run until it has one: open the pull request
+  # early, or use the run button below.
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# A job with no ceiling of its own runs for six hours before GitHub stops it, and these are metered
+# minutes on a private repository. A run takes under two minutes, so these caps are only ever
+# reached by something wedged: a scanner waiting on a database it cannot fetch, a build waiting on
+# a registry.
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - run: npm ci
+      - run: npm run build --if-present
+      # Typecheck, the full test suite, whole-repo lint, then the committed floors, fail-fast.
+      - run: npm run verify:ship
+      # The client-secret scan needs built client assets to look at, so it runs after the build
+      # and is pointed at the static directory the server ships.
+      - run: node scripts/check-client-secrets.mjs public
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Fails the run on a HIGH or CRITICAL finding in the lockfile (dev dependencies included,
+      # they run on the build machine), in the Dockerfile, or on a credential committed into
+      # source. demo/ is another repository's deliberately stale tree and is skipped on purpose.
+      # The action and the scanner are both pinned: a mutable tag can be repointed by its owner.
+      #
+      # It runs when the code changes, and on request. It is deliberately NOT on a timer, so it
+      # says nothing about a quiet repository: advisories are published against versions already
+      # installed, and one published after the last commit here goes unnoticed until the next
+      # push or a manual run. Use the run button after a quiet stretch rather than reading a green
+      # history as an all-clear.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          # There is no input for this, so it goes through the scanner's own environment.
+          TRIVY_INCLUDE_DEV_DEPS: 'true'
+        with:
+          version: v0.74.0
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          # Without this the scanner exits 0 on findings and the job passes while reporting them.
+          exit-code: '1'
+          ignore-unfixed: false
+          skip-dirs: demo
+          # Empty today. Wired now so that the day an unfixable advisory turns this red, the fix
+          # is one dated entry in one file rather than an argument with the gate. The file says
+          # what an entry has to carry.
+          trivyignores: .trivyignore.yaml
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The deploy is this image. A green test suite says nothing about whether it still builds,
+      # and finding that out during a deploy is finding out too late.
+      - run: docker build -t bumpwarden:ci .

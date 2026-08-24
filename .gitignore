@@ -1,6 +1,7 @@
 # environment
 .env
 .env.*
+!.env.example
 
 # dependencies
 node_modules/
@@ -11,6 +12,11 @@ __pycache__/
 dist/
 build/
 *.log
+
+# tool output
+coverage/
+reports/
+.stryker-tmp/
 
 # OS
 .DS_Store

@@ -1,0 +1,542 @@
+import { describe, expect, it } from 'vitest';
+import { RunFetcher } from './http.js';
+import { fetchAdvisory, fetchVersionFacts, severityFromCvss } from './depsdev.js';
+import {
+  fetchPackument,
+  fetchPublishTime,
+  githubRepoFrom,
+  isValidPackageName,
+  registryUrl,
+  resolveCandidate,
+} from './npm.js';
+import {
+  compareTags,
+  compareVersions,
+  fetchReleaseNotes,
+  fetchTextFile,
+  tagCandidates,
+} from './github.js';
+import { json, routedFetch, status, text, urlContains } from '../testkit/scripted-fetch.js';
+
+const noSleep = () => Promise.resolve();
+const TARGET = { owner: 'expressjs', repo: 'express', ref: 'main' };
+
+function fetcherFor(
+  routes: Parameters<typeof routedFetch>[0],
+  options: ConstructorParameters<typeof RunFetcher>[0] = {},
+) {
+  const routed = routedFetch(routes);
+  return {
+    fetcher: new RunFetcher({ fetchImpl: routed.impl, sleep: noSleep, ...options }),
+    urls: routed.urls,
+  };
+}
+
+describe('npm registry client', () => {
+  it('escapes the slash in a scoped package name', () => {
+    expect(registryUrl('express')).toBe('https://registry.npmjs.org/express');
+    expect(registryUrl('@google/adk')).toBe('https://registry.npmjs.org/@google%2Fadk');
+  });
+
+  const repoUrls: Array<[string | null, { owner: string; repo: string } | null]> = [
+    ['git+https://github.com/expressjs/express.git', { owner: 'expressjs', repo: 'express' }],
+    ['https://github.com/sindresorhus/chalk', { owner: 'sindresorhus', repo: 'chalk' }],
+    ['git+ssh://git@github.com/isaacs/node-glob.git', { owner: 'isaacs', repo: 'node-glob' }],
+    ['https://gitlab.com/someone/thing', null],
+    [null, null],
+  ];
+
+  it.each(repoUrls)('reads %s as %o', (url, expected) => {
+    expect(githubRepoFrom(url)).toEqual(expected);
+  });
+
+  /**
+   * This field is written by whoever published the package, and what comes out of it is pasted
+   * into an api.github.com path that this service's token is sent with. `..` on both sides walks
+   * back out of `/repos/`, so the call would land wherever the package author pointed it.
+   */
+  const craftedRepoUrls = [
+    'https://github.com/../../user/repos',
+    'https://github.com/..%2f..%2fuser/repos',
+    'https://github.com/expressjs?x=/express',
+    'https://github.com/expressjs#/express',
+    'https://github.com/-leading-dash/express',
+    `https://github.com/${'a'.repeat(60)}/express`,
+    'https://github.com/expressjs/..',
+  ];
+
+  it.each(craftedRepoUrls)('refuses %s rather than aiming a call with it', (url) => {
+    expect(githubRepoFrom(url)).toBeNull();
+  });
+
+  it('keeps every character GitHub itself allows in a name', () => {
+    expect(githubRepoFrom('https://github.com/Some-Org/my_repo.js')).toEqual({
+      owner: 'Some-Org',
+      repo: 'my_repo.js',
+    });
+  });
+
+  it('picks the highest stable version above the installed one', () => {
+    const packument = {
+      name: 'demo',
+      distTags: { latest: '2.1.0' },
+      versions: { '1.0.0': {}, '2.0.0': {}, '2.1.0': {}, '3.0.0-beta.1': {} },
+      time: { '2.1.0': '2026-01-01T00:00:00Z' },
+      repositoryUrl: null,
+      gaps: [],
+    };
+
+    expect(resolveCandidate(packument, '1.0.0')).toMatchObject({
+      version: '2.1.0',
+      publishedAt: '2026-01-01T00:00:00Z',
+    });
+  });
+
+  it('ignores prereleases and returns null when nothing is newer', () => {
+    const packument = {
+      name: 'demo',
+      distTags: { latest: '1.0.0' },
+      versions: { '1.0.0': {}, '2.0.0-rc.1': {} },
+      time: {},
+      repositoryUrl: null,
+      gaps: [],
+    };
+    expect(resolveCandidate(packument, '1.0.0')).toBeNull();
+  });
+
+  it('flags a changed peer dependency range', () => {
+    const packument = {
+      name: 'demo',
+      distTags: { latest: '2.0.0' },
+      versions: {
+        '1.0.0': { peerDependencies: { react: '^18' } },
+        '2.0.0': { peerDependencies: { react: '^19' } },
+      },
+      time: {},
+      repositoryUrl: null,
+      gaps: [],
+    };
+    expect(resolveCandidate(packument, '1.0.0')?.peerRangeChanged).toBe(true);
+  });
+
+  const names: Array<[string, boolean]> = [
+    ['express', true],
+    ['@google/adk', true],
+    ['node-fetch', true],
+    ['a.b_c~d', true],
+    ['.hidden', false],
+    ['../../etc/passwd', false],
+    ['express?foo=1', false],
+    ['express/../glob', false],
+    ['Express', false],
+    ['', false],
+  ];
+
+  it.each(names)('treats %s as a valid npm name: %s', (name, expected) => {
+    expect(isValidPackageName(name)).toBe(expected);
+  });
+
+  it('never puts an invalid dependency key into a url', async () => {
+    const { fetcher, urls } = fetcherFor([]);
+
+    const result = await fetchPackument(fetcher, '../../etc/passwd', '1.0.0');
+
+    expect(result).toMatchObject({ ok: false, reason: 'malformed' });
+    expect(urls).toEqual([]);
+  });
+
+  /**
+   * The registry's own shapes, read live on 2026-08-22: `prisma` is a 44 MB packument with 9,276
+   * versions, its `latest` document is 5 KB, and a version document carries the repository, the
+   * engines and the peer ranges but no publish time.
+   */
+  const PRISMA_LATEST = {
+    version: '7.9.1',
+    engines: { node: '^20.19 || ^22.12 || >=24.0' },
+    peerDependencies: { typescript: '>=5.4.0', 'better-sqlite3': '>=9.0.0' },
+    repository: { url: 'https://github.com/prisma/prisma.git', directory: 'packages/cli' },
+  };
+  const PRISMA_INSTALLED = { version: '5.0.0', engines: { node: '>=16.13' } };
+  const PRISMA = 'https://registry.npmjs.org/prisma';
+
+  /**
+   * The packument route answers a body over the cap, and it matches the bare name only: a route
+   * on `urlContains('/prisma')` would also answer `/prisma/latest`, with a packument where a
+   * version document is expected, and the client would call that malformed.
+   */
+  function prismaRegistry(installedStep: () => Response = json(PRISMA_INSTALLED)) {
+    return fetcherFor(
+      [
+        { match: urlContains('/prisma/latest'), step: json(PRISMA_LATEST) },
+        { match: urlContains('/prisma/5.0.0'), step: installedStep },
+        { match: (url) => url.endsWith('/prisma'), step: text('x'.repeat(4_000)) },
+      ],
+      { maxBytes: 1_000 },
+    );
+  }
+
+  it('reads the two version documents and never the packument when latest is above the installed version', async () => {
+    const { fetcher, urls } = prismaRegistry();
+
+    const result = await fetchPackument(fetcher, 'prisma', '5.0.0');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toMatchObject({
+      distTags: { latest: '7.9.1' },
+      repositoryUrl: 'https://github.com/prisma/prisma.git',
+      time: {},
+      gaps: [],
+    });
+    expect(Object.keys(result.value.versions).sort()).toEqual(['5.0.0', '7.9.1']);
+    expect(resolveCandidate(result.value, '5.0.0')).toEqual({
+      version: '7.9.1',
+      publishedAt: null,
+      deprecated: false,
+      engines: '^20.19 || ^22.12 || >=24.0',
+      peerRangeChanged: true,
+    });
+    expect(urls).toEqual([`${PRISMA}/latest`, `${PRISMA}/5.0.0`]);
+  });
+
+  it('stops after one small read when the installed version is at latest', async () => {
+    const { fetcher, urls } = prismaRegistry();
+
+    const result = await fetchPackument(fetcher, 'prisma', '7.9.1');
+
+    expect(result.ok && result.value.gaps).toEqual([]);
+    expect(result.ok && resolveCandidate(result.value, '7.9.1')).toBeNull();
+    expect(urls).toEqual([`${PRISMA}/latest`]);
+  });
+
+  it('reads the version list only when the installed version is ahead of latest', async () => {
+    const { fetcher, urls } = fetcherFor([
+      { match: urlContains('/demo/latest'), step: json({ version: '1.9.0' }) },
+      {
+        match: (url) => url.endsWith('/demo'),
+        step: json({
+          'dist-tags': { latest: '1.9.0', next: '2.1.0' },
+          versions: { '1.9.0': {}, '2.0.0': {}, '2.1.0': { engines: { node: '>= 20' } } },
+          time: { '2.1.0': '2026-02-01T00:00:00Z' },
+          repository: 'github:someone/demo',
+        }),
+      },
+    ]);
+
+    const result = await fetchPackument(fetcher, 'demo', '2.0.0');
+
+    expect(result.ok && result.value.gaps).toEqual([]);
+    expect(result.ok && resolveCandidate(result.value, '2.0.0')).toMatchObject({
+      version: '2.1.0',
+      publishedAt: '2026-02-01T00:00:00Z',
+      engines: '>= 20',
+    });
+    expect(urls).toEqual([
+      'https://registry.npmjs.org/demo/latest',
+      'https://registry.npmjs.org/demo',
+    ]);
+  });
+
+  it('records the versions above the installed one as unread when that list is over the cap', async () => {
+    const { fetcher, urls } = prismaRegistry();
+
+    const result = await fetchPackument(fetcher, 'prisma', '8.0.0');
+
+    expect(result.ok && result.value.gaps).toEqual([
+      { what: 'prisma version list', why: expect.stringContaining('size cap') },
+    ]);
+    expect(result.ok && resolveCandidate(result.value, '8.0.0')).toBeNull();
+    expect(urls).toEqual([`${PRISMA}/latest`, PRISMA]);
+  });
+
+  it('still resolves a candidate when the installed version is gone from the registry', async () => {
+    const { fetcher } = prismaRegistry(status(404));
+
+    const result = await fetchPackument(fetcher, 'prisma', '5.0.0');
+
+    expect(result.ok && Object.keys(result.value.versions)).toEqual(['7.9.1']);
+    expect(result.ok && result.value.gaps).toEqual([]);
+    expect(result.ok && resolveCandidate(result.value, '5.0.0')?.version).toBe('7.9.1');
+  });
+
+  it('records the installed document as a gap when it fails for any other reason', async () => {
+    const { fetcher } = prismaRegistry(status(503));
+
+    const result = await fetchPackument(fetcher, 'prisma', '5.0.0');
+
+    expect(result.ok && result.value.gaps.map((gap) => gap.what)).toEqual([
+      'prisma@5.0.0 registry data',
+    ]);
+  });
+
+  it('passes the failure through, without a second read, when the latest document cannot be read', async () => {
+    const { fetcher, urls } = fetcherFor([
+      { match: urlContains('/prisma/latest'), step: status(503) },
+      { match: (url) => url.endsWith('/prisma'), step: json({ 'dist-tags': { latest: '7.9.1' } }) },
+    ]);
+
+    const result = await fetchPackument(fetcher, 'prisma', '5.0.0');
+
+    expect(result).toMatchObject({ ok: false, reason: 'unavailable' });
+    expect(urls.every((url) => url.endsWith('/prisma/latest'))).toBe(true);
+  });
+
+  it('calls a latest document that names no version malformed rather than reading around it', async () => {
+    const { fetcher, urls } = fetcherFor([
+      {
+        match: urlContains('registry.npmjs.org/demo'),
+        step: json({ 'dist-tags': { latest: '1.0.0' } }),
+      },
+    ]);
+
+    const result = await fetchPackument(fetcher, 'demo', '0.9.0');
+
+    expect(result).toMatchObject({ ok: false, reason: 'malformed' });
+    expect(urls).toEqual(['https://registry.npmjs.org/demo/latest']);
+  });
+
+  it('reads a publish time out of the whole packument, and has none for a package over the cap', async () => {
+    const { fetcher, urls } = fetcherFor([
+      {
+        match: (url) => url.endsWith('/demo'),
+        step: json({ time: { '2.1.0': '2026-02-01T00:00:00Z' } }),
+      },
+    ]);
+    const capped = prismaRegistry();
+
+    expect(await fetchPublishTime(fetcher, 'demo', '2.1.0')).toBe('2026-02-01T00:00:00Z');
+    expect(await fetchPublishTime(fetcher, 'demo', '9.9.9')).toBeNull();
+    expect(urls).toEqual(['https://registry.npmjs.org/demo']);
+    expect(fetcher.stats().calls).toBe(1);
+    expect(await fetchPublishTime(capped.fetcher, 'prisma', '7.9.1')).toBeNull();
+    expect(await fetchPublishTime(capped.fetcher, '../../etc/passwd', '1.0.0')).toBeNull();
+    expect(capped.urls).toEqual([PRISMA]);
+  });
+});
+
+describe('deps.dev client', () => {
+  const bands: Array<[number | null, string]> = [
+    [9.8, 'critical'],
+    [9, 'critical'],
+    [8.1, 'high'],
+    [7, 'high'],
+    [5, 'moderate'],
+    [4, 'moderate'],
+    [3.9, 'low'],
+    [0.1, 'low'],
+    [null, 'moderate'],
+  ];
+
+  it.each(bands)('a cvss3 score of %s is %s', (score, expected) => {
+    expect(severityFromCvss(score)).toBe(expected);
+  });
+
+  it('maps a version response to the facts the scorer needs', async () => {
+    const { fetcher } = fetcherFor([
+      {
+        match: urlContains('/versions/8.1.0'),
+        step: json({
+          publishedAt: '2023-01-14T22:35:33Z',
+          isDeprecated: true,
+          deprecatedReason: 'Glob versions prior to v9 are no longer supported',
+          advisoryKeys: [{ id: 'GHSA-qw6h-vgh9-j6wx' }],
+        }),
+      },
+    ]);
+
+    const facts = await fetchVersionFacts(fetcher, 'glob', '8.1.0');
+
+    expect(facts.ok && facts.value).toMatchObject({
+      publishedAt: '2023-01-14T22:35:33Z',
+      isDeprecated: true,
+      advisoryIds: ['GHSA-qw6h-vgh9-j6wx'],
+    });
+  });
+
+  it('derives an advisory severity from its cvss score', async () => {
+    const { fetcher } = fetcherFor([
+      {
+        match: urlContains('/advisories/'),
+        step: json({
+          advisoryKey: { id: 'GHSA-qw6h-vgh9-j6wx' },
+          url: 'https://osv.dev/vulnerability/GHSA-qw6h-vgh9-j6wx',
+          title: 'express vulnerable to XSS via response.redirect()',
+          cvss3Score: 5,
+        }),
+      },
+    ]);
+
+    const advisory = await fetchAdvisory(fetcher, 'GHSA-qw6h-vgh9-j6wx');
+
+    expect(advisory.ok && advisory.value.severity).toBe('moderate');
+    expect(advisory.ok && advisory.value.url).toContain('osv.dev');
+  });
+});
+
+/** The exact tag ranges a set of request urls asked GitHub to compare. */
+function comparesIn(urls: string[]): Set<string> {
+  const marker = '/compare/';
+  return new Set(
+    urls
+      .filter((url) => url.includes(marker))
+      .map((url) => url.slice(url.indexOf(marker) + marker.length)),
+  );
+}
+
+describe('github client', () => {
+  it('tries both tag spellings before recording a miss', async () => {
+    const { fetcher, urls } = fetcherFor([]);
+
+    const result = await fetchReleaseNotes(fetcher, TARGET, '5.2.1');
+
+    expect(tagCandidates('5.2.1')).toEqual(['v5.2.1', '5.2.1']);
+    expect(urls.some((u) => u.includes('/tags/v5.2.1'))).toBe(true);
+    expect(urls.some((u) => u.includes('/tags/5.2.1'))).toBe(true);
+    expect(result).toMatchObject({ ok: false, reason: 'not-found' });
+  });
+
+  it('accepts the unprefixed tag when the prefixed one is missing', async () => {
+    const { fetcher } = fetcherFor([
+      {
+        match: urlContains('/tags/5.2.1'),
+        step: json({ body: '## Breaking changes', html_url: 'https://github.test/r' }),
+      },
+    ]);
+
+    const result = await fetchReleaseNotes(fetcher, TARGET, '5.2.1');
+
+    expect(result.ok && result.value.body).toBe('## Breaking changes');
+  });
+
+  it('treats an empty release body as no notes rather than as notes', async () => {
+    const { fetcher } = fetcherFor([{ match: urlContains('/tags/'), step: json({ body: '   ' }) }]);
+
+    expect(await fetchReleaseNotes(fetcher, TARGET, '5.2.1')).toMatchObject({ ok: false });
+  });
+
+  it('decodes base64 file contents', async () => {
+    const { fetcher } = fetcherFor([
+      {
+        match: urlContains('/contents/package.json'),
+        step: json({ content: Buffer.from('{"name":"x"}').toString('base64'), encoding: 'base64' }),
+      },
+    ]);
+
+    const result = await fetchTextFile(fetcher, TARGET, 'package.json');
+
+    expect(result.ok && result.value).toBe('{"name":"x"}');
+  });
+
+  it('reports an unexpected content encoding as malformed', async () => {
+    const { fetcher } = fetcherFor([
+      { match: urlContains('/contents/'), step: json({ content: 'plain', encoding: 'utf-8' }) },
+    ]);
+
+    expect(await fetchTextFile(fetcher, TARGET, 'package.json')).toMatchObject({
+      reason: 'malformed',
+    });
+  });
+
+  it('reduces a compare to commit subjects and changed files', async () => {
+    const { fetcher } = fetcherFor([
+      {
+        match: urlContains('/compare/'),
+        step: json({
+          total_commits: 2,
+          commits: [
+            { commit: { message: 'feat(api)!: drop v1\n\nlong body' } },
+            { commit: { message: 'chore: bump deps' } },
+          ],
+          files: [{ filename: 'lib/router.js' }],
+        }),
+      },
+    ]);
+
+    const result = await compareTags(fetcher, TARGET, 'v4.18.2', 'v5.2.1');
+
+    expect(result.ok && result.value).toEqual({
+      totalCommits: 2,
+      commitSubjects: ['feat(api)!: drop v1', 'chore: bump deps'],
+      changedFiles: ['lib/router.js'],
+    });
+  });
+
+  it('passes the failure through when GitHub is unavailable', async () => {
+    const { fetcher } = fetcherFor([{ match: urlContains('/compare/'), step: status(500) }]);
+
+    expect(await compareTags(fetcher, TARGET, 'a', 'b')).toMatchObject({ ok: false });
+  });
+
+  /**
+   * express, body-parser and prisma all tag without the `v`, and a live run lost the commit
+   * subjects for five bumps out of eight before the compare tried the second spelling.
+   */
+  it('compares on the unprefixed tags when the prefixed pair is missing', async () => {
+    const { fetcher, urls } = fetcherFor([
+      {
+        match: urlContains('/compare/4.18.2...5.2.1'),
+        step: json({ total_commits: 1, commits: [{ commit: { message: 'fix: a thing' } }] }),
+      },
+    ]);
+
+    const result = await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1');
+
+    expect(urls.some((u) => u.includes('/compare/v4.18.2...v5.2.1'))).toBe(true);
+    expect(result.ok && result.value.commitSubjects).toEqual(['fix: a thing']);
+  });
+
+  /**
+   * Checked against the live API on 2026-08-22: expressjs/express answers 200 for the tag `4.18.2`
+   * and 404 for `v4.18.2`, then 200 for `v5.2.1` and 404 for `5.2.1`. A project that adopts the
+   * prefix at a major is exactly the project whose major bump most needs its commit subjects, and
+   * express is in this repository's own demo.
+   */
+  it('compares across a tag spelling that changed between the two versions', async () => {
+    const { fetcher, urls } = fetcherFor([
+      {
+        match: urlContains('/compare/4.18.2...v5.2.1'),
+        step: json({ total_commits: 2, commits: [{ commit: { message: 'feat!: drop app.del' } }] }),
+      },
+    ]);
+
+    const result = await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1');
+
+    expect(result.ok && result.value.commitSubjects).toEqual(['feat!: drop app.del']);
+    expect(urls.some((u) => u.includes('/compare/4.18.2...v5.2.1'))).toBe(true);
+  });
+
+  it('spends the consistent pairs before the mixed ones, and never repeats a range', async () => {
+    const { fetcher, urls } = fetcherFor([]);
+
+    await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1');
+
+    // Compared as a set of exact ranges: "v4.18.2...v5.2.1" contains the substring
+    // "4.18.2...v5.2.1", so a contains check would pass on a pair it never asked for.
+    expect(comparesIn(urls)).toEqual(
+      new Set(['v4.18.2...v5.2.1', '4.18.2...5.2.1', '4.18.2...v5.2.1', 'v4.18.2...5.2.1']),
+    );
+
+    const ordered = [...urls].filter((u) => u.includes('/compare/'));
+    expect(ordered[0]).toContain('/compare/v4.18.2...v5.2.1');
+    expect(ordered[1]).toContain('/compare/4.18.2...5.2.1');
+  });
+
+  it('records a miss once, naming both spellings, rather than one per attempt', async () => {
+    const { fetcher } = fetcherFor([]);
+
+    expect(await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1')).toMatchObject({
+      ok: false,
+      reason: 'not-found',
+      detail: 'no compare between 4.18.2 and 5.2.1 under any tag spelling',
+    });
+  });
+
+  it('stops at the first spelling when GitHub itself is failing', async () => {
+    const { fetcher, urls } = fetcherFor([{ match: urlContains('/compare/'), step: status(500) }]);
+
+    expect(await compareVersions(fetcher, TARGET, '4.18.2', '5.2.1')).toMatchObject({ ok: false });
+    // Retries of the same range collapse into one entry, so this asserts the second spelling was
+    // never reached rather than counting requests.
+    expect(comparesIn(urls)).toEqual(new Set(['v4.18.2...v5.2.1']));
+  });
+});

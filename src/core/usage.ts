@@ -1,0 +1,153 @@
+import type { ReleaseEvidence, UsageMatch, UsageSite } from './types.js';
+
+export interface SourceFile {
+  path: string;
+  text: string;
+}
+
+export interface UsageResult {
+  match: UsageMatch;
+  symbols: string[];
+  sites: UsageSite[];
+}
+
+const CODE_SPAN = /`([^`\n]{2,60})`/g;
+const REMOVAL_SUBJECT = /\b(?:removed|renamed|dropped|replaced)\s+`?([A-Za-z_$][\w$.]{2,40})`?/gi;
+const IDENTIFIER = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/;
+
+/** Words that appear inside code spans constantly and would match every file if treated as API. */
+const TOO_COMMON = new Set([
+  'true',
+  'false',
+  'null',
+  'undefined',
+  'string',
+  'number',
+  'boolean',
+  'object',
+  'array',
+  'function',
+  'const',
+  'let',
+  'var',
+  'default',
+  'node',
+  'npm',
+  'main',
+  'type',
+  'types',
+  'module',
+  'index',
+  'error',
+  'options',
+  'config',
+]);
+
+function escapeForRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function acceptable(candidate: string): boolean {
+  const head = candidate.split('.')[0] ?? '';
+  return (
+    IDENTIFIER.test(candidate) &&
+    candidate.length >= 3 &&
+    !TOO_COMMON.has(candidate.toLowerCase()) &&
+    !TOO_COMMON.has(head.toLowerCase())
+  );
+}
+
+/**
+ * How many distinct names one release may contribute. Release notes are written by whoever
+ * published the package, and every name here becomes a regular expression run against every line
+ * of every source file read from the watched repository. A changelog carrying a few thousand
+ * backticked identifiers, which is a legal GitHub release body, would turn that product into tens
+ * of millions of tests on the one thread this service also answers requests on. No real changelog
+ * names anywhere near this many.
+ */
+const MAX_SYMBOLS = 120;
+
+/**
+ * Names the release evidence says changed. Deliberately mechanical: code spans and a short list of
+ * removal verbs, nothing inferred. The model refines the wording of a brief later, but this list is
+ * what the score is computed from, so it has to be reproducible from the text alone.
+ */
+export function changedSymbols(release: ReleaseEvidence): string[] {
+  const text = [release.notes ?? '', ...release.commitSubjects].join('\n');
+  const found = new Set<string>();
+
+  for (const match of text.matchAll(CODE_SPAN)) {
+    if (found.size >= MAX_SYMBOLS) return [...found];
+    // Release notes name a method with its call shape, `req.param(name)`. The argument list is
+    // documentation, not part of the symbol, so it is dropped before the identifier check.
+    const cleaned = (match[1] ?? '').trim().replace(/\([^)]*\)$/, '');
+    if (acceptable(cleaned)) found.add(cleaned);
+  }
+  for (const match of text.matchAll(REMOVAL_SUBJECT)) {
+    if (found.size >= MAX_SYMBOLS) break;
+    const name = match[1] ?? '';
+    if (acceptable(name)) found.add(name);
+  }
+
+  return [...found];
+}
+
+export function importsPackage(file: SourceFile, packageName: string): boolean {
+  const name = escapeForRegex(packageName);
+  const specifier = `['"]${name}(?:/[^'"]*)?['"]`;
+  const pattern = new RegExp(
+    `(?:from\\s+${specifier}|require\\(\\s*${specifier}|import\\(\\s*${specifier})`,
+  );
+  return pattern.test(file.text);
+}
+
+/**
+ * The brief and the locking table quote a handful of call sites, so collecting every one of them on
+ * a large repository buys nothing and can produce thousands of rows. The cap bounds the evidence,
+ * not the verdict: one match already decides the factor.
+ */
+const MAX_SITES = 25;
+
+function sitesIn(file: SourceFile, symbols: string[]): UsageSite[] {
+  const patterns = symbols.map((symbol) => ({
+    symbol,
+    pattern: new RegExp(`\\b${escapeForRegex(symbol)}\\b`),
+  }));
+  const sites: UsageSite[] = [];
+  const lines = file.text.split('\n');
+
+  for (const [index, line] of lines.entries()) {
+    for (const { symbol, pattern } of patterns) {
+      if (!pattern.test(line)) continue;
+      sites.push({ path: file.path, line: index + 1, symbol, text: line.trim().slice(0, 160) });
+      if (sites.length >= MAX_SITES) return sites;
+    }
+  }
+
+  return sites;
+}
+
+export function classifyUsage(
+  packageName: string,
+  release: ReleaseEvidence,
+  files: SourceFile[],
+): UsageResult {
+  const importers = files.filter((file) => importsPackage(file, packageName));
+  const symbols = changedSymbols(release);
+
+  if (importers.length === 0) {
+    return { match: 'unused', symbols, sites: [] };
+  }
+
+  const sites: UsageSite[] = [];
+  for (const file of importers) {
+    sites.push(...sitesIn(file, symbols).slice(0, MAX_SITES - sites.length));
+    if (sites.length >= MAX_SITES) break;
+  }
+
+  return {
+    match: sites.length > 0 ? 'changed-symbol' : 'package-only',
+    symbols,
+    sites,
+  };
+}
