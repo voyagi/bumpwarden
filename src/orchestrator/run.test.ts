@@ -3,7 +3,6 @@ import type { BriefEngine } from '../agent/write-brief.js';
 import { PER_RUN_BUDGETS, RUN_TIME_BUDGET_SECONDS } from '../core/policy.js';
 import type { RunRecord } from '../core/records.js';
 import { BRIEFS_IN_FLIGHT } from '../core/stack.js';
-import { RepositoryActor } from '../io/github-actor.js';
 import { RunFetcher } from '../io/http.js';
 import { createLogger } from '../io/log.js';
 import { MemoryStore } from '../io/memory-store.js';
@@ -12,7 +11,14 @@ import { deferred } from '../testkit/deferred.js';
 import { fakeGitHub, type FakeGitHub } from '../testkit/fake-github.js';
 import { DEMO, MANIFEST_JSON, NOW } from '../testkit/fixtures.js';
 import { json, routedFetch, urlContains, type Route } from '../testkit/scripted-fetch.js';
-import { RunInProgressError, executeRun, resolveBudgets, type RunDependencies } from './run.js';
+import { ROUTES, RepositoryActor } from '../io/github-actor.js';
+import {
+  RunInProgressError,
+  budgetedBumps,
+  executeRun,
+  resolveBudgets,
+  type RunDependencies,
+} from './run.js';
 
 const MANIFEST = {
   name: 'demo-app',
@@ -411,6 +417,44 @@ describe('a second run', () => {
   });
 });
 
+/**
+ * On a repository with more pending bumps than the action budget, score order alone decided who
+ * got it, so the same top few had their open issues refreshed every run and the ones below them
+ * were "carried to the next run" for ever. Nobody was ever told about them.
+ */
+describe('which bumps the action budget reaches', () => {
+  const queued = (total: number, score: number) =>
+    Array.from({ length: total }, (_unused, index) => ({
+      score: { total: score - index },
+    })) as never;
+
+  const reportedAt = (total: number, indices: number[]) =>
+    Array.from({ length: total }, (_unused, index) =>
+      indices.includes(index) ? ({ action: { outcome: 'opened' } } as never) : null,
+    );
+
+  it('gives it to nobody when there is none left', () => {
+    expect(budgetedBumps(queued(3, 90), reportedAt(3, []), 0)).toEqual(new Set());
+  });
+
+  it('gives it to everyone when there is enough for all of them', () => {
+    expect(budgetedBumps(queued(3, 90), reportedAt(3, [0]), 5)).toEqual(new Set([0, 1, 2]));
+  });
+
+  it('reaches a bump nobody has been told about before one that already has an issue', () => {
+    // Index 0 is the riskiest and already reported. Index 2 has never been acted on, and with one
+    // action left it is the one that gets it: the reader already has the first one.
+    expect(budgetedBumps(queued(3, 90), reportedAt(3, [0, 1]), 1)).toEqual(new Set([2]));
+  });
+
+  it('keeps riskiest first inside each group', () => {
+    // 0 and 1 reported, 2 and 3 not. Two actions left go to the unreported pair in score order.
+    expect(budgetedBumps(queued(4, 90), reportedAt(4, [0, 1]), 2)).toEqual(new Set([2, 3]));
+    // Four left reaches the reported pair too, and reaches the worse of them first.
+    expect(budgetedBumps(queued(4, 90), reportedAt(4, [0, 1]), 3)).toEqual(new Set([2, 3, 0]));
+  });
+});
+
 describe('budgets and failures', () => {
   it('spends exactly what the Policy page publishes when a caller names no budget', () => {
     // The page tells a reader a run takes at most this many actions. A default that drifted from
@@ -426,6 +470,66 @@ describe('budgets and failures', () => {
       brief: 0,
       action: 3,
     });
+  });
+
+  /**
+   * The published numbers say "in a run", and a scheduled run covers the whole watch list. Each
+   * repository used to resolve the budget for itself, so the promise held for one project and was
+   * multiplied by the length of the list for any more than that.
+   */
+  it('shares one brief budget across the whole watch list', async () => {
+    const context = await harness();
+    await context.store.putWatchedRepository({ ...DEMO, id: 'demo/second', repo: 'second' });
+
+    await executeRun(context.deps, { trigger: 'scheduled', briefBudget: 1 });
+
+    expect(context.engine.seen).toBe(1);
+  });
+
+  it('shares one action budget across the whole watch list', async () => {
+    const context = await harness();
+    await context.store.putWatchedRepository({ ...DEMO, id: 'demo/second', repo: 'second' });
+
+    await executeRun(context.deps, { trigger: 'scheduled', actionBudget: 1 });
+
+    const actions = await context.store.listActions({ limit: 50 });
+    expect(actions).toHaveLength(2);
+    expect(actions.filter((action) => action.outcome === 'skipped')).toHaveLength(1);
+    expect(actions.filter((action) => action.outcome === 'opened')).toHaveLength(1);
+  });
+
+  /**
+   * `facts()` answering first meant a listing that threw afterwards left the run believing it could
+   * write, with an empty list of what already exists. An empty list matches no bump marker, so the
+   * run would have opened a second issue for every bump that already had one, on a transient read
+   * failure. The repository is a dry run instead.
+   */
+  it('makes a repository a dry run when its issues cannot be listed', async () => {
+    const upstream = fakeGitHub({ files: { 'package.json': MANIFEST_JSON } });
+    const context = await harness({
+      createActor: (repository) =>
+        new RepositoryActor(
+          async (route, params) => {
+            if (route === ROUTES.issues) throw new Error('secondary rate limit hit');
+            return upstream.request(route, params);
+          },
+          { owner: repository.owner, repo: repository.repo },
+          { minWriteIntervalMs: 0, sleep: async () => undefined },
+        ),
+    });
+
+    await executeRun(context.deps, { trigger: 'scheduled' });
+
+    const [bump] = await context.store.listBumps({ repositoryId: DEMO.id, limit: 10 });
+    expect(bump?.action?.outcome).toBe('dry-run');
+    expect(upstream.issues.filter((issue) => !issue.isPullRequest)).toEqual([]);
+
+    // The reason names the read that failed, not the token, because the token may be fine.
+    const [result] = context.saved.at(-1)?.repositories ?? [];
+    expect(result?.missing.map((source) => source.why)).toContain('secondary rate limit hit');
+    expect(result?.missing.map((source) => source.why)).not.toContain(
+      'the token cannot push to this repository, so actions are dry runs',
+    );
   });
 
   it('records a brief as unavailable when no Gemini key is configured', async () => {

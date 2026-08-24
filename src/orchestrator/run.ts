@@ -67,6 +67,30 @@ export function resolveBudgets(options: RunOptions): { brief: number; action: nu
   };
 }
 
+/**
+ * What is LEFT of a run's budget. The numbers above are published as per-run limits and a run can
+ * cover the whole watch list, so resolving them inside each repository gave every repository its
+ * own full allowance: five projects could ask for five times the briefs and take five times the
+ * actions the Policy page promises. One of these is made per run and each repository takes from
+ * what the ones before it left.
+ */
+export interface RunAllowance {
+  briefs: number;
+  actions: number;
+}
+
+export function allowanceFor(options: RunOptions): RunAllowance {
+  const budgets = resolveBudgets(options);
+  return { briefs: budgets.brief, actions: budgets.action };
+}
+
+/** Hands out up to `wanted` of what is left, and records what it handed out. */
+function take(allowance: RunAllowance, of: keyof RunAllowance, wanted: number): number {
+  const given = Math.max(0, Math.min(wanted, allowance[of]));
+  allowance[of] -= given;
+  return given;
+}
+
 export interface RunDependencies {
   store: BumpwardenStore;
   now: () => Date;
@@ -191,12 +215,19 @@ async function loadActorContext(
     return context;
   }
 
+  // `canWrite` is set last, and only once all three reads have come back, because writing depends
+  // on the other two as much as on the permission. A listing that throws leaves `existing` empty,
+  // an empty `existing` matches no bump marker, and a run that writes on that basis opens a second
+  // issue for every bump that already had one. So a transient read failure makes the repository a
+  // dry run rather than a duplicating one.
+  let read = false;
   try {
     const facts = await actor.facts();
-    context.canWrite = facts.canWrite;
     context.defaultBranch = facts.defaultBranch;
     context.existing = await actor.listBumpwardenIssues(LABEL_ROOT);
     context.openPullRequests = await actor.listOpenPullRequests();
+    context.canWrite = facts.canWrite;
+    read = true;
   } catch (error) {
     missing.push({
       what: 'GitHub write access',
@@ -204,7 +235,9 @@ async function loadActorContext(
     });
   }
 
-  if (actor && !context.canWrite) {
+  // Only when the reads succeeded and the answer was no. After a failure the token may well be
+  // able to push, and saying otherwise would send an operator to check the wrong thing.
+  if (read && !context.canWrite) {
     missing.push({
       what: 'GitHub write access',
       why: 'the token cannot push to this repository, so actions are dry runs',
@@ -226,12 +259,13 @@ interface QueuedBump {
 }
 
 async function processBump(
-  deps: RunDependencies,
   repository: WatchedRepository,
   context: ActContext,
   queued: QueuedBump,
   brief: BriefRecord,
   act: boolean,
+  /** Read before the budget was shared out, because what was reported before decides who gets it. */
+  previous: BumpRecord | null,
 ): Promise<ProcessedBump> {
   const { bump, score } = queued;
   const at = context.at;
@@ -240,7 +274,6 @@ async function processBump(
     ? await actOnBump(context, { bump, score, brief })
     : skippedAction(context.runId, bump, score, at);
 
-  const previous = await deps.store.getBump(repository.id, bump.key);
   return {
     action,
     record: {
@@ -270,6 +303,36 @@ function briefRefusal(index: number, budget: number, overtime: boolean): string 
   return null;
 }
 
+/** A bump the reader has already been told about, on GitHub, by a run that landed something. */
+function alreadyReported(record: BumpRecord | null | undefined): boolean {
+  const outcome = record?.action?.outcome;
+  return outcome !== undefined && LANDED.has(outcome);
+}
+
+/**
+ * Which bumps the action budget reaches. Score order decides the queue and the audit log, but it
+ * cannot also decide this: on a repository with more pending bumps than the budget, the same top
+ * few kept the budget every run, spending it on refreshing issues that were already open, and the
+ * ones below them were "carried to the next run" for ever without a reader ever hearing of them.
+ *
+ * A bump nobody has been told about takes the budget first, and within each group the riskiest
+ * comes first. So a run still leads with the worst thing it can act on, and the queue advances.
+ */
+export function budgetedBumps(
+  scored: readonly QueuedBump[],
+  previous: ReadonlyArray<BumpRecord | null>,
+  budget: number,
+): Set<number> {
+  const unreported: number[] = [];
+  const reported: number[] = [];
+
+  scored.forEach((_unused, index) => {
+    (alreadyReported(previous[index]) ? reported : unreported).push(index);
+  });
+
+  return new Set([...unreported, ...reported].slice(0, budget));
+}
+
 async function runRepository(
   deps: RunDependencies,
   options: RunOptions,
@@ -277,6 +340,7 @@ async function runRepository(
   runId: string,
   at: Date,
   deadline: number,
+  allowance: RunAllowance,
 ): Promise<RepositoryResult> {
   const logger = deps.logger ?? silentLogger;
   const fetcher = deps.createFetcher();
@@ -315,7 +379,9 @@ async function runRepository(
     }))
     .sort((left, right) => right.score.total - left.score.total);
 
-  const { brief: briefBudget, action: actionBudget } = resolveBudgets(options);
+  // What this repository may spend is what the repositories before it left, not a fresh copy of
+  // the published number.
+  const briefBudget = take(allowance, 'briefs', scored.length);
   let actions = 0;
 
   // The briefs go out several at a time, riskiest first, because each depends on nothing but its
@@ -330,14 +396,24 @@ async function runRepository(
     ),
   );
 
+  // Read before the budget is shared out, because what a bump got last time decides whether it
+  // needs the budget this time. These are the same reads the loop below used to make one at a
+  // time, moved earlier rather than added.
+  const previous: Array<BumpRecord | null> = [];
+  for (const queued of scored) {
+    previous.push(await deps.store.getBump(repository.id, queued.bump.key));
+  }
+
+  const acting = budgetedBumps(scored, previous, take(allowance, 'actions', scored.length));
+
   for (const [index, queued] of scored.entries()) {
     const processed = await processBump(
-      deps,
       repository,
       context,
       queued,
       briefs[index] as BriefRecord,
-      index < actionBudget,
+      acting.has(index),
+      previous[index] ?? null,
     );
     await deps.store.appendAction(processed.action);
     await deps.store.saveBump(processed.record);
@@ -473,10 +549,15 @@ async function runClaimed(
   });
 
   const deadline = startedAt.getTime() + RUN_TIME_BUDGET_SECONDS * 1000;
+  // One allowance for the whole run, handed down and drawn from, so the published numbers mean
+  // what they say however many repositories the watch list holds.
+  const allowance = allowanceFor(options);
   const results: RepositoryResult[] = [];
   for (const repository of repositories) {
     try {
-      results.push(await runRepository(deps, options, repository, id, deps.now(), deadline));
+      results.push(
+        await runRepository(deps, options, repository, id, deps.now(), deadline, allowance),
+      );
     } catch (error) {
       logger.error('repository failed', { runId: id, repository: repository.id, error });
       results.push({
