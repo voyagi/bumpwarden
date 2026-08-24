@@ -69,9 +69,9 @@ export type Claim = z.infer<typeof claimSchema>;
 
 export interface VerifiedClaim extends Claim {
   /**
-   * True when the file and line the model named is one the mechanical usage matcher also found.
-   * A false claim is still shown, labelled, because a reader can judge it; it is never counted as
-   * evidence.
+   * True when the file, the line AND the symbol the model named are one the mechanical usage
+   * matcher also found. A false claim is still shown, labelled, because a reader can judge it, and
+   * it is never counted as evidence.
    */
   verified: boolean;
 }
@@ -189,7 +189,11 @@ export interface VerifiedClaims {
  */
 export function verifyClaims(claims: Claim[], ground: ClaimGround): VerifiedClaims {
   const haystack = normalize(ground.evidence);
-  const known = new Set(ground.sites.map((site) => `${site.path}:${site.line}`));
+  // The symbol belongs in the key, not only the file and the line. The model is handed the exact
+  // symbol each site was found by, so a claim naming a different one at a line that does exist is
+  // an invention, and matching on position alone stamped it verified while the issue said, in so
+  // many words, that this line uses that symbol.
+  const known = new Set(ground.sites.map((site) => `${site.path}:${site.line}:${site.symbol}`));
 
   const kept: VerifiedClaim[] = [];
   let dropped = 0;
@@ -200,7 +204,7 @@ export function verifyClaims(claims: Claim[], ground: ClaimGround): VerifiedClai
       dropped += 1;
       continue;
     }
-    kept.push({ ...claim, verified: known.has(`${claim.path}:${claim.line}`) });
+    kept.push({ ...claim, verified: known.has(`${claim.path}:${claim.line}:${claim.symbol}`) });
   }
 
   return { claims: kept, dropped };

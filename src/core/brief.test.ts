@@ -98,6 +98,18 @@ describe('claim verification', () => {
     expect(result.dropped).toBe(0);
   });
 
+  /**
+   * The line existing is not the claim being true. The model is handed the exact symbol each site
+   * was found by, so naming a different one at a real line is an invention, and stamping that
+   * verified put a sentence in an issue saying this line uses that symbol on the strength of the
+   * line number alone.
+   */
+  it('marks a claim on the right line but the wrong symbol unverified', () => {
+    const result = verifyClaims([claim({ symbol: 'res.sendFile' })], ground);
+    expect(result.dropped).toBe(0);
+    expect(result.claims[0]?.verified).toBe(false);
+  });
+
   it('marks a claim on the right file but the wrong line unverified', () => {
     expect(verifyClaims([claim({ line: 19 })], ground).claims[0]?.verified).toBe(false);
   });
