@@ -100,6 +100,17 @@ function seedComments(seeds: Array<Partial<StoredComment>>): StoredComment[] {
 }
 
 /**
+ * The real API answers a listing one page at a time, and the caller reads on until a page comes
+ * back short. A fake that ignored the page parameter would hand back the same first page forever,
+ * so a test with more than one page of anything would either hang or prove nothing.
+ */
+function paged<T>(rows: T[], params: Record<string, unknown>): T[] {
+  const size = Number(params.per_page ?? 30);
+  const page = Number(params.page ?? 1);
+  return rows.slice((page - 1) * size, page * size);
+}
+
+/**
  * A small stand-in for the parts of GitHub the actor writes to. It keeps state between calls, so a
  * second run over the same bump really does find the issue the first run opened, which is the only
  * way to prove idempotency without a network.
@@ -135,18 +146,21 @@ export function fakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     [ROUTES.issues]: (params) => {
       const wanted = String(params.labels ?? '');
       const matching = issues.filter((issue) => issue.labels.includes(wanted));
-      return { status: 200, data: matching.map(issueJson) };
+      return { status: 200, data: paged(matching, params).map(issueJson) };
     },
 
-    [ROUTES.pulls]: () => ({
+    [ROUTES.pulls]: (params) => ({
       status: 200,
-      data: issues.filter((issue) => issue.isPullRequest).map(issueJson),
+      data: paged(
+        issues.filter((issue) => issue.isPullRequest),
+        params,
+      ).map(issueJson),
     }),
 
     [ROUTES.comments]: (params) => {
       const number = Number(params.issue_number);
       const matching = comments.filter((comment) => comment.issueNumber === number);
-      return { status: 200, data: matching.map(commentJson) };
+      return { status: 200, data: paged(matching, params).map(commentJson) };
     },
 
     [ROUTES.createLabel]: (params) => {

@@ -129,6 +129,12 @@ export interface ActorOptions {
 
 const DEFAULT_WRITE_INTERVAL_MS = 1000;
 
+/** GitHub's own maximum for a listing page, so this is the fewest requests a full read can take. */
+const PAGE_SIZE = 100;
+
+/** A runaway guard, not a policy. Ten pages is a thousand items, and reaching it is reported. */
+const MAX_PAGES = 10;
+
 /**
  * Writes for exactly one repository. Owner and repo come from the constructor and are re-applied to
  * every request, so no caller can aim a write at a repository the operator did not put on the watch
@@ -154,6 +160,33 @@ export class RepositoryActor {
 
   private async read(route: string, params: Record<string, unknown> = {}): Promise<GitHubResponse> {
     return this.send(route, { ...params, owner: this.target.owner, repo: this.target.repo });
+  }
+
+  /**
+   * Every list this actor reads is asked a question of the form "has this bump been reported
+   * already", so a page boundary is not a display limit here, it is a wrong answer. A marker on
+   * page two is invisible to one read, and an invisible marker opens a second issue for a bump
+   * that already has one. The cap is a runaway guard rather than a policy: a repository past a
+   * thousand of these has other problems, and the log line says so rather than the list going
+   * quietly short.
+   */
+  private async readAll<T>(
+    route: string,
+    params: Record<string, unknown>,
+    what: string,
+  ): Promise<T[]> {
+    const collected: T[] = [];
+
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
+      const response = await this.read(route, { ...params, per_page: PAGE_SIZE, page });
+      const batch = this.expect(response, what) as T[];
+      collected.push(...batch);
+      if (batch.length < PAGE_SIZE) return collected;
+    }
+
+    throw new Error(
+      `${what} did not finish inside ${MAX_PAGES} pages, so the result would have been incomplete`,
+    );
   }
 
   private async write(route: string, params: Record<string, unknown>): Promise<GitHubResponse> {
@@ -185,23 +218,34 @@ export class RepositoryActor {
   }
 
   async listBumpwardenIssues(label: string): Promise<IssueLike[]> {
-    const response = await this.read(ROUTES.issues, { labels: label, state: 'all', per_page: 100 });
-    const data = this.expect(response, 'listing issues') as RawIssue[];
+    const data = await this.readAll<RawIssue>(
+      ROUTES.issues,
+      { labels: label, state: 'all' },
+      'listing issues',
+    );
     return data.map(toIssue);
   }
 
   async listOpenPullRequests(): Promise<IssueLike[]> {
-    const response = await this.read(ROUTES.pulls, { state: 'open', per_page: 100 });
-    const data = this.expect(response, 'listing pull requests') as RawIssue[];
+    const data = await this.readAll<RawIssue>(
+      ROUTES.pulls,
+      { state: 'open' },
+      'listing pull requests',
+    );
     return data.map(toIssue);
   }
 
+  /**
+   * Read whole for the same reason as the two above: the caller is looking for bumpwarden's own
+   * comment by its marker, and a marker on a later page means a second comment beside the first
+   * on every run after that.
+   */
   async listComments(issueNumber: number): Promise<CommentLike[]> {
-    const response = await this.read(ROUTES.comments, {
-      issue_number: issueNumber,
-      per_page: 100,
-    });
-    const data = this.expect(response, 'listing comments') as RawComment[];
+    const data = await this.readAll<RawComment>(
+      ROUTES.comments,
+      { issue_number: issueNumber },
+      'listing comments',
+    );
     return data.map(toComment);
   }
 

@@ -73,6 +73,59 @@ describe('every call the actor makes', () => {
   });
 });
 
+/**
+ * These three lists answer one question: has this bump been reported already. A page boundary in
+ * that answer is not a display limit, it is a wrong answer, and a marker sitting on page two opens
+ * a second issue for a bump that already has one.
+ */
+describe('reading a list that decides idempotency', () => {
+  const many = (count: number, make: (index: number) => Record<string, unknown>) =>
+    Array.from({ length: count }, (_unused, index) => make(index));
+
+  it('reads every page of the labelled issues, not just the first', async () => {
+    const github = fakeGitHub({
+      issues: many(250, (index) => ({
+        number: 1000 + index,
+        labels: ['bumpwarden'],
+        body: `<!-- bumpwarden:key=demo/app#pkg-${index}@1.0.0 -->`,
+      })),
+    });
+    const { actor } = actorOver(github);
+
+    const found = await actor.listBumpwardenIssues('bumpwarden');
+
+    expect(found).toHaveLength(250);
+    // The marker that only exists on the third page is the one a single read would have missed.
+    expect(found.some((issue) => issue.body.includes('pkg-249@1.0.0'))).toBe(true);
+    expect(github.calls.filter((call) => call.route === ROUTES.issues)).toHaveLength(3);
+  });
+
+  it('reads every page of the open pull requests', async () => {
+    const github = fakeGitHub({
+      issues: many(150, (index) => ({ number: 2000 + index, isPullRequest: true })),
+    });
+    expect(await actorOver(github).actor.listOpenPullRequests()).toHaveLength(150);
+  });
+
+  it('reads every page of one issue’s comments', async () => {
+    const github = fakeGitHub({
+      comments: many(120, (index) => ({ id: 5000 + index, issueNumber: 41 })),
+    });
+    expect(await actorOver(github).actor.listComments(41)).toHaveLength(120);
+  });
+
+  /**
+   * A short page is what ends the read, so a source that never returns one has to end it some
+   * other way. Going quiet with a partial list would be the one outcome worse than failing.
+   */
+  it('fails loudly rather than returning a partial list', async () => {
+    const endless = { status: 200, data: many(100, (index) => ({ number: index })) };
+    const actor = new RepositoryActor(async () => endless, TARGET, { minWriteIntervalMs: 0 });
+
+    await expect(actor.listBumpwardenIssues('bumpwarden')).rejects.toThrow(/did not finish inside/);
+  });
+});
+
 describe('repository facts', () => {
   it('reports write access when the token can push', async () => {
     const { actor } = actorOver(fakeGitHub({ canPush: true, defaultBranch: 'trunk' }));
