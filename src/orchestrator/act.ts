@@ -71,10 +71,37 @@ function botOf(login: string): BotPullRequest['bot'] | null {
   return BOT_LOGINS.get(login.toLowerCase()) ?? null;
 }
 
+function escapeForRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * A package name inside a longer package name is the trap here, and it is not a rare shape:
+ * `react` sits inside `react-dom` and inside `preact`, `lodash` inside `lodash.merge`. A substring
+ * test therefore reads a bot's pull request for the neighbour as one for this package. The
+ * characters below are the ones that can carry a name onward, so a match touching any of them is a
+ * match inside something else. A slash is among them: a title says "update dependency express",
+ * with spaces, and only a branch name puts a prefix in front of it.
+ */
+const NAME_EDGE = '[\\w@./-]';
+
+/**
+ * Versions have the same trap and a worse one, because `5.0.0` sits inside `15.0.0` and inside
+ * `5.0.0-rc1`, and the second is a different release rather than a longer name.
+ */
+const VERSION_EDGE = '[\\d.+-]';
+
+function mentions(haystack: string, needle: string, edge: string): boolean {
+  return new RegExp(`(?<!${edge})${escapeForRegex(needle)}(?!${edge})`, 'i').test(haystack);
+}
+
 /**
  * A bot pull request only counts when it is for this package AND this exact version. Renovate often
  * titles a major bump "to v5" with no patch version, and a brief commented onto the wrong pull
  * request is worse than bumpwarden opening its own, so an inexact match is treated as no match.
+ * That preference decides the boundary rules above too: they are strict enough to miss a real
+ * match written in an unusual way, which costs a duplicate pull request somebody can see, rather
+ * than loose enough to comment on a neighbour's, which costs a brief filed under the wrong package.
  */
 export function findBotPullRequest(
   pulls: IssueLike[],
@@ -85,14 +112,14 @@ export function findBotPullRequest(
     const bot = botOf(pull.author);
     if (!bot) continue;
 
-    const haystack = `${pull.title} ${pull.headRef ?? ''}`.toLowerCase();
-    if (!haystack.includes(dependency.toLowerCase())) continue;
+    const haystack = `${pull.title} ${pull.headRef ?? ''}`;
+    if (!mentions(haystack, dependency, NAME_EDGE)) continue;
 
     return {
       number: pull.number,
       url: pull.url,
       bot,
-      matchesCandidate: haystack.includes(candidateVersion.toLowerCase()),
+      matchesCandidate: mentions(haystack, candidateVersion, VERSION_EDGE),
     };
   }
   return null;

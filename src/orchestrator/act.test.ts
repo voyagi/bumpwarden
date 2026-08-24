@@ -279,6 +279,38 @@ describe('finding a bot pull request', () => {
     ).toBeNull();
   });
 
+  /**
+   * A name inside a longer name is the whole hazard, and these are the real shapes it takes. A
+   * substring test read every one of the first five as a match, so a brief about `react` would have
+   * gone onto the bot's `react-dom` pull request and bumpwarden would have opened none of its own.
+   */
+  it.each([
+    ['a longer sibling', 'Bump react-dom to 19.0.0', 'react'],
+    ['a longer prefix', 'Bump preact to 10.0.0', 'react'],
+    ['a dotted sibling', 'Bump lodash.merge to 4.6.2', 'lodash'],
+    ['a scoped sibling', 'Bump @types/express to 5.0.0', 'express'],
+    ['a suffixed sibling', 'Bump eslint-plugin-import to 2.0.0', 'eslint'],
+  ])('does not read %s as this package', (_label, title, dependency) => {
+    expect(findBotPullRequest([pull({ title })], dependency, '19.0.0')).toBeNull();
+  });
+
+  it.each([
+    ['a plain title', 'Bump react to 19.0.0', null],
+    ['a scoped name', 'Bump @types/node to 24.0.0', null],
+    ['a renovate branch beside the title', 'Update dependency react to v19', 'renovate/react-19.x'],
+  ])('still finds this package in %s', (_label, title, headRef) => {
+    const dependency = title.includes('@types/node') ? '@types/node' : 'react';
+    expect(findBotPullRequest([pull({ title, headRef })], dependency, '19.0.0')).not.toBeNull();
+  });
+
+  /** `5.0.0` sits inside `15.0.0`, and inside `5.0.0-rc1`, which is a different release. */
+  it.each([
+    ['a larger major', 'Bump express to 15.0.0'],
+    ['a prerelease of the same version', 'Bump express to 5.0.0-rc1'],
+  ])('does not confirm the candidate from %s', (_label, title) => {
+    expect(findBotPullRequest([pull({ title })], 'express', '5.0.0')?.matchesCandidate).toBe(false);
+  });
+
   it('ignores a bot pull request for a different package', () => {
     expect(
       findBotPullRequest([pull({ title: 'Bump hono to 4.14.0' })], 'express', '5.0.0'),
