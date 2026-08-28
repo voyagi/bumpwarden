@@ -33,6 +33,14 @@ export const ROUTES = {
   createPull: 'POST /repos/{owner}/{repo}/pulls',
 } as const;
 
+/**
+ * The one route that is not about a repository. It reads the login the token acts under, which is
+ * what tells a comment this agent wrote from one somebody else left carrying the same marker. It
+ * holds no `{...}` parameter, so unlike the routes above there is nothing in it to aim, and it is a
+ * GET, so there is nothing to write through it either.
+ */
+export const VIEWER_ROUTE = 'GET /user';
+
 export interface RepositoryTarget {
   owner: string;
   repo: string;
@@ -147,6 +155,8 @@ export class RepositoryActor {
   /** Null rather than 0: "never written" and "written at the epoch" must not read the same. */
   private lastWriteAt: number | null = null;
   private readonly ensuredLabels = new Set<string>();
+  /** Undefined until asked: null is an answer GitHub gave, not a question nobody has put yet. */
+  private selfLoginAnswer: string | null | undefined;
 
   constructor(
     private readonly send: GitHubRequest,
@@ -215,6 +225,25 @@ export class RepositoryActor {
       defaultBranch: data.default_branch ?? 'main',
       canWrite: data.permissions?.push === true,
     };
+  }
+
+  /**
+   * The login this token acts under, read once and kept for the rest of the actor's life. Anything
+   * other than a login comes back as null rather than as an exception: a token that may not read
+   * its own identity can still open issues and comment, and a caller that cannot name itself is
+   * expected to leave a comment it cannot prove is its own alone rather than to stop.
+   */
+  async selfLogin(): Promise<string | null> {
+    if (this.selfLoginAnswer === undefined) {
+      // Straight to the transport rather than through `read`, which would attach an owner and a
+      // repo this route has nowhere to put.
+      const response = await this.send(VIEWER_ROUTE, {});
+      const login = OK.has(response.status)
+        ? (response.data as { login?: string } | null)?.login
+        : undefined;
+      this.selfLoginAnswer = typeof login === 'string' && login.length > 0 ? login : null;
+    }
+    return this.selfLoginAnswer;
   }
 
   async listBumpwardenIssues(label: string): Promise<IssueLike[]> {

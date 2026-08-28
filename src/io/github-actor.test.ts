@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MANIFEST_JSON } from '../testkit/fixtures.js';
 import { fakeGitHub } from '../testkit/fake-github.js';
-import { ROUTES, RepositoryActor } from './github-actor.js';
+import { ROUTES, RepositoryActor, VIEWER_ROUTE } from './github-actor.js';
 
 const TARGET = { owner: 'demo', repo: 'app' };
 
@@ -32,6 +32,36 @@ describe('the route table', () => {
 
   it('uses a read verb for every route that is not a write', () => {
     expect(routes.filter((route) => route.startsWith('DELETE'))).toEqual([]);
+  });
+
+  /**
+   * The one route outside the table, so the property the tests above pin for every other route is
+   * pinned for this one too: it reads, and it holds no parameter a caller could aim somewhere.
+   */
+  it('reads the token’s own identity through a route with nothing in it to aim', () => {
+    expect(VIEWER_ROUTE.startsWith('GET ')).toBe(true);
+    expect(VIEWER_ROUTE).not.toContain('{');
+  });
+});
+
+describe('the login the token acts under', () => {
+  it('reads it once, however often it is asked', async () => {
+    const github = fakeGitHub({ viewer: 'bumpwarden-bot' });
+    const { actor } = actorOver(github);
+
+    expect(await actor.selfLogin()).toBe('bumpwarden-bot');
+    expect(await actor.selfLogin()).toBe('bumpwarden-bot');
+    expect(github.calls.filter((call) => call.route === VIEWER_ROUTE)).toHaveLength(1);
+  });
+
+  /**
+   * A token that may not read its own identity can still open issues and comment, so a refusal is
+   * an answer rather than a failure. The caller treats it as reason not to edit a comment it cannot
+   * prove is its own.
+   */
+  it('answers null when GitHub will not say, instead of failing the run', async () => {
+    const { actor } = actorOver(fakeGitHub({ failures: { [VIEWER_ROUTE]: 403 } }));
+    expect(await actor.selfLogin()).toBeNull();
   });
 });
 

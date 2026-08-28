@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { keyFromBody } from '../core/bump-key.js';
+import { keyFromBody, marker } from '../core/bump-key.js';
 import { LABEL_ROOT } from '../core/policy.js';
 import type { Score } from '../core/types.js';
-import { ROUTES, RepositoryActor } from '../io/github-actor.js';
+import { ROUTES, RepositoryActor, VIEWER_ROUTE } from '../io/github-actor.js';
 import { fakeGitHub, type FakeGitHub, type FakeGitHubOptions } from '../testkit/fake-github.js';
 import {
   DEMO,
@@ -198,6 +198,14 @@ describe('when a bot already opened a pull request for the same bump', () => {
     labels: ['dependencies'],
   };
 
+  /** A comment somebody else left on that pull request, carrying this bump's marker. */
+  const planted = {
+    id: 700,
+    issueNumber: 42,
+    author: 'a-stranger',
+    body: `${marker(summaryOf().key)}\nnothing to see here`,
+  };
+
   it('comments the brief there instead of opening a second pull request', async () => {
     const fake = github({ issues: [dependabot] });
     const action = await actOnBump(await contextFor(fake), inputs(GREEN));
@@ -221,6 +229,44 @@ describe('when a bot already opened a pull request for the same bump', () => {
     await actOnBump(await contextFor(fake), inputs(GREEN));
 
     expect(fake.issues.find((issue) => issue.number === 42)?.labels).toEqual(['dependencies']);
+  });
+
+  /**
+   * The marker is an HTML comment, and the watched repository is public, so anyone who can comment
+   * on the bot's pull request can put the same one in a comment of their own. Editing whatever
+   * carried it handed the agent away: the brief went into a stranger's comment on every run, and
+   * the url in the audit log pointed at text they can rewrite once the run has ended.
+   */
+  it('leaves a comment carrying its marker under another login alone', async () => {
+    const fake = github({ issues: [dependabot], comments: [planted] });
+    const action = await actOnBump(await contextFor(fake), inputs(GREEN));
+
+    expect(fake.comments).toHaveLength(2);
+    expect(fake.comments[0]?.body).toBe(planted.body);
+    expect(writeCalls(fake)).not.toContain(ROUTES.updateComment);
+    expect(action.detail).toContain('under another login');
+  });
+
+  it('edits its own comment even when a stranger planted one first', async () => {
+    const fake = github({ issues: [dependabot], comments: [planted] });
+    await actOnBump(await contextFor(fake), inputs(GREEN));
+    const second = await actOnBump(await contextFor(fake), inputs(GREEN));
+
+    expect(fake.comments).toHaveLength(2);
+    expect(fake.comments[0]?.body).toBe(planted.body);
+    expect(second.detail).toContain('updated a comment');
+  });
+
+  it('writes a new comment when it cannot read the login it acts under', async () => {
+    const fake = github({
+      issues: [dependabot],
+      comments: [{ ...planted, author: 'bumpwarden' }],
+      failures: { [VIEWER_ROUTE]: 403 },
+    });
+    const action = await actOnBump(await contextFor(fake), inputs(GREEN));
+
+    expect(fake.comments).toHaveLength(2);
+    expect(action.detail).toContain('could not be read');
   });
 
   it('opens its own pull request when the bot is on a different version', async () => {
