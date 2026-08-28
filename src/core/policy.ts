@@ -76,7 +76,7 @@ export const POLICY_RULES: Record<Band, PolicyRule> = {
     kind: 'issue',
     labels: [LABEL_ROOT, `${LABEL_ROOT}:amber`, `${LABEL_ROOT}:review`],
     summary:
-      'Open an issue carrying the brief and a migration checklist, labelled bumpwarden:review. No pull request.',
+      'Open an issue carrying the brief and the migration steps the release notes asked for, labelled bumpwarden:review. No pull request.',
   },
   red: {
     id: 'RED-HOLD-1',

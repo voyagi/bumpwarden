@@ -82,15 +82,103 @@ function scoreTable(score: Score): string {
 }
 
 /**
- * A handle or an issue number inside a code span stays text: GitHub's mention filter skips `code`,
- * `pre`, `a`, `style` and `script` parents. Without this, release notes a stranger wrote decide who
- * an issue signed by this agent notifies, and which unrelated issue in the watched repository
- * collects a cross-reference. Both forms keep their preceding character out of the handle so a
- * scoped version (`pkg@2.0.0`), a path (`/@scope`) and an anchor (`notes#12`) are left alone.
+ * Release notes a stranger wrote would otherwise decide who an issue signed by this agent
+ * notifies, and which unrelated issue in the watched repository collects a cross-reference.
+ *
+ * This is an empty HTML comment. GitHub keeps it in the body, shows nothing for it, and it ends
+ * the text node it sits in. The mention and reference filters only match at the start of one, so
+ * neither ever sees a handle to link. A backslash escape and a numeric entity both fail here,
+ * because CommonMark resolves them before those filters run and the filters then see a bare `@`.
+ * The tool's own markers are read back out of live issue bodies, so a comment surviving a round
+ * trip through GitHub is something this code already depends on elsewhere.
+ */
+const INERT = '<!---->';
+
+/**
+ * GitHub links a handle after any character that is not a letter or a digit, so this asks the same
+ * question rather than a narrower one. The old form excluded a dot, a dash, a slash and a backtick
+ * as well, and a changelog reading `ping -@octocat` therefore notified a stranger from an issue
+ * this agent signed. A preceding letter or digit still leaves `pkg@2.0.0` and `notes#12` alone,
+ * and the lookbehind consumes nothing, so `@a@b` cannot hide its second handle behind its first.
+ *
+ * `&` stays excluded for a reference, so a numeric entity a changelog wrote (`&#39;`) still reads
+ * as the character it names rather than as its own source.
  */
 const MENTION =
-  /(^|[^\w`/.-])@([A-Za-z\d](?:-?[A-Za-z\d]){0,38}(?:\/[A-Za-z\d_-](?:[A-Za-z\d._-]{0,58}[A-Za-z\d_-])?)?)/g;
-const ISSUE_REF = /(^|[^\w`&#])#(\d{1,7})\b/g;
+  /(?<![A-Za-z\d])@([A-Za-z\d](?:-?[A-Za-z\d]){0,38}(?:\/[A-Za-z\d_-](?:[A-Za-z\d._-]{0,58}[A-Za-z\d_-])?)?)/g;
+const ISSUE_REF = /(?<![A-Za-z\d&#])#(\d{1,7})\b/g;
+/** Every markdown link and image opens with this, so escaping it is what stops the whole family. */
+const LINK_OPENER = /(\\*)\[/g;
+/**
+ * A bare address GitHub turns into a link of its own, whose text is its destination, so there is
+ * nothing in it to disguise and nothing here should rewrite it.
+ *
+ * A bracket or a backtick ends it. Without that, an address written to run on past its own end
+ * (`https://x.example/[label](https://elsewhere`) would be read as one long address, and the
+ * bracket inside it would be carried across as a stretch not to touch: the address would end up
+ * shielding the very syntax this file escapes.
+ */
+const AUTOLINKED = /https?:\/\/[^\s<>[\]`]*[^\s<>[\]`.,:;"')]/g;
+
+/**
+ * The runs of backticks that really pair, the way CommonMark pairs them: a run opens, and the next
+ * run of the same length closes it, found by a plain forward scan. Backslashes are deliberately
+ * ignored, because a backslash escape does not work inside a code span, and a rule that pretended
+ * otherwise read `` `a\` `` as still open and left what followed exposed.
+ */
+function codeSpans(line: string): Array<[number, number]> {
+  const runs: Array<{ start: number; length: number }> = [];
+  for (let index = 0; index < line.length;) {
+    if (line[index] !== '`') {
+      index += 1;
+      continue;
+    }
+    let end = index;
+    while (end < line.length && line[end] === '`') end += 1;
+    runs.push({ start: index, length: end - index });
+    index = end;
+  }
+
+  const spans: Array<[number, number]> = [];
+  for (let open = 0; open < runs.length; open += 1) {
+    const opener = runs[open];
+    if (!opener) continue;
+    const close = runs.findIndex((run, at) => at > open && run.length === opener.length);
+    if (close === -1) continue;
+    const closer = runs[close];
+    if (!closer) continue;
+    spans.push([opener.start, closer.start + closer.length]);
+    open = close;
+  }
+  return spans;
+}
+
+/** Stretches of a line that already read as their own destination and must not be rewritten. */
+function leaveAlone(line: string): Array<[number, number]> {
+  const urls = [...line.matchAll(AUTOLINKED)].map((match): [number, number] => [
+    match.index,
+    match.index + match[0].length,
+  ]);
+  return [...codeSpans(line), ...urls].sort((left, right) => left[0] - right[0]);
+}
+
+/**
+ * The prose between the stretches above, where a package author's words could otherwise become
+ * markup of this agent's. Every neutralisation here is local: it changes the characters it is
+ * given and nothing around them, so surrounding text the same author wrote cannot shift what it
+ * does. Wrapping in backticks was the alternative and it could be shifted, which is why it is gone.
+ */
+function neutralised(text: string): string {
+  return text
+    .replace(/`/g, '\\`')
+    .replace(MENTION, (_match, handle: string) => `@${INERT}${handle}`)
+    .replace(ISSUE_REF, (_match, digits: string) => `#${INERT}${digits}`)
+    .replace(LINK_OPENER, (match, escapes: string) =>
+      // An odd run of backslashes already escaped this bracket, so it opens nothing and adding
+      // another would only show the reader a backslash it did not have.
+      escapes.length % 2 === 1 ? match : `${escapes}\\[`,
+    );
+}
 
 /**
  * Everything the model wrote about someone else's release notes passes through here. Angle brackets
@@ -98,11 +186,26 @@ const ISSUE_REF = /(^|[^\w`&#])#(\d{1,7})\b/g;
  * render as a heading of this agent's, and `>` at the start of a line would open a blockquote.
  */
 function asText(text: string): string {
-  return text
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(MENTION, (_match, before: string, handle: string) => `${before}\`@${handle}\``)
-    .replace(ISSUE_REF, (_match, before: string, digits: string) => `${before}\`#${digits}\``);
+  const escaped = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  return escaped
+    .split('\n')
+    .map((line) => {
+      let out = '';
+      let at = 0;
+      for (const [start, end] of leaveAlone(line)) {
+        if (start < at) continue;
+        out += neutralised(line.slice(at, start)) + line.slice(start, end);
+        at = end;
+      }
+      return out + neutralised(line.slice(at));
+    })
+    .join('\n');
+}
+
+/** Collapses a field to one line without deciding anything about its characters. */
+function flattened(text: string): string {
+  return text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
 }
 
 /**
@@ -113,12 +216,16 @@ function asText(text: string): string {
  * only what this agent decided.
  */
 function oneLine(text: string): string {
-  return asText(text.replace(/\s*[\r\n]+\s*/g, ' ').trim());
+  return asText(flattened(text));
 }
 
-/** A code span ends at the next backtick, and neither a path nor a symbol legitimately holds one. */
+/**
+ * A path or a symbol goes inside a code span this file opens, where a bracket starts nothing and a
+ * handle links to nobody, so it keeps its own characters and `src/app/[id]/page.tsx` reads as
+ * itself. Only the backticks that would end that span early are taken out.
+ */
 function code(text: string): string {
-  return oneLine(text).replace(/`/g, '');
+  return flattened(text).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/`/g, '');
 }
 
 /**
@@ -129,22 +236,21 @@ function code(text: string): string {
 const OPENS_A_BLOCK =
   /^(\s*)(#{1,6}|`{3,}|~{3,}|-+[ \t]*$|=+[ \t]*$|(?:\*[ \t]*){3,}$|(?:_[ \t]*){3,}$)/;
 
+/** A line that would open a block of its own keeps its characters as text instead. */
+function keepAsText(line: string): string {
+  return line.replace(
+    OPENS_A_BLOCK,
+    (_match, indent: string, opener: string) => `${indent}\\${opener}`,
+  );
+}
+
 /**
  * `whatChanged` is the one field kept multi-line, because it is the only place the brief is allowed
  * more than a sentence. Paragraphs and lists are what it is for and survive; a line that would open
  * a block keeps its characters as text instead.
  */
 function multiLine(text: string): string {
-  return asText(text.replace(/\r\n/g, '\n'))
-    .split('\n')
-    .map((line) =>
-      line.replace(
-        OPENS_A_BLOCK,
-        (_match, indent: string, opener: string) => `${indent}\\${opener}`,
-      ),
-    )
-    .join('\n')
-    .trim();
+  return asText(text.replace(/\r\n/g, '\n')).split('\n').map(keepAsText).join('\n').trim();
 }
 
 /** A pipe ends a table cell, and a factor's evidence can carry a path or a quote from upstream. */
@@ -180,7 +286,10 @@ export function generatedByMarker(model: string): string {
  */
 function disclosure(model: string, confidence: string): string {
   return [
-    `Generated by the AI model ${code(model)} through bumpwarden, from this release's notes, its`,
+    // Prose, not a code span, so this takes the full neutralisation rather than `code`. The model
+    // id is a constant today and carries nothing of anyone else's, but a name that only holds
+    // because of what happens to be assigned to it is the kind that stops holding quietly.
+    `Generated by the AI model ${oneLine(model)} through bumpwarden, from this release's notes, its`,
     'commit subjects and the names of the files it changed. Quoted claims about this repository',
     'were checked against the call sites; nothing else in it was. No person has reviewed it: read',
     `it before acting on it. Confidence: ${confidence}.`,
@@ -239,14 +348,34 @@ function briefSection(brief: BriefRecord): string {
   return parts.join('\n');
 }
 
-function migrationSection(brief: BriefRecord, checklist: boolean): string {
+/**
+ * The sentence the migration section opens with. Like the disclosure above it, every clause has to
+ * be true of what the code does: the steps are the model's reading of someone else's notes, only a
+ * quoted claim is checked against this repository, and this agent is asking for nothing.
+ */
+const MIGRATION_SOURCE = [
+  "The model's account of what this release asks of a consumer, from the notes and the commits it",
+  'was given. bumpwarden derived none of these steps and checked none of them against this',
+  'repository, and nothing below is this agent asking for a command to be run.',
+].join(' ');
+
+/**
+ * A migration step is the model's reading of release notes a package author wrote, and unlike a
+ * quoted claim nothing checks it against anything. Set out as this agent's own checklist, "run
+ * `npx something`" out of a stranger's changelog reads as a step bumpwarden worked out and stands
+ * behind, which is an issue saying more than this agent decided. So the section says whose account
+ * the steps are and quotes them instead of assigning them. Nothing is dropped, reworded or
+ * reordered: an ordinal is the only markup added to someone else's words, a step that would open a
+ * block of its own keeps its characters as text the way `whatChanged` does, and the heading and
+ * the sentence open the section, so a cut for length cannot leave the steps standing without them.
+ */
+function migrationSection(brief: BriefRecord): string {
   const steps = brief.content?.migrationSteps ?? [];
   if (steps.length === 0) return '';
 
-  const lines = steps.map((step, index) =>
-    checklist ? `- [ ] ${oneLine(step)}` : `${index + 1}. ${oneLine(step)}`,
-  );
-  return ['### Migration', '', ...lines].join('\n');
+  const heading = '### Migration, as the model read the release notes';
+  const quoted = steps.map((step, index) => `> ${index + 1}. ${keepAsText(oneLine(step))}`);
+  return [heading, '', MIGRATION_SOURCE, '', ...quoted].join('\n');
 }
 
 function footer(input: BodyInput): string {
@@ -315,8 +444,8 @@ function assemble(
 }
 
 /** What the model wrote: the one part of a body a package author can lengthen. */
-function modelSections(input: BodyInput, checklist: boolean): string[] {
-  return [briefSection(input.brief), migrationSection(input.brief, checklist)];
+function modelSections(input: BodyInput): string[] {
+  return [briefSection(input.brief), migrationSection(input.brief)];
 }
 
 /** What bumpwarden decided, which no changelog gets to shorten. */
@@ -329,10 +458,9 @@ function verdictSections(input: BodyInput): string[] {
  * request says about the change it made, and is empty for an issue.
  */
 export function actionBody(input: BodyInput, manifestNote = ''): string {
-  const checklist = input.rule.kind !== 'pull-request';
   return assemble(
     [verdictLine(input), manifestNote],
-    modelSections(input, checklist),
+    modelSections(input),
     verdictSections(input),
     input.bump.key,
   );
@@ -346,5 +474,5 @@ export function actionBody(input: BodyInput, manifestNote = ''): string {
 export function botCommentBody(input: BodyInput): string {
   const verdict = VERDICT_WORD[input.score.band].toLowerCase();
   const opener = `bumpwarden scored this bump ${input.score.total} of 100 (${verdict}) and is commenting here rather than opening a second pull request.`;
-  return assemble([opener], modelSections(input, false), verdictSections(input), input.bump.key);
+  return assemble([opener], modelSections(input), verdictSections(input), input.bump.key);
 }
