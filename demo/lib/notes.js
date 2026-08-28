@@ -6,10 +6,11 @@ const glob = require('glob');
 
 const NOTES_DIR = path.join(__dirname, '..', 'notes');
 
-// glob 7 resolves a relative pattern against `root`, which is why the pattern below has no
-// directory in it. Newer majors dropped the option, so this is one of the calls to check first.
+// `root` is glob 7's mount point for a pattern that starts with a slash, so the leading slash is
+// what makes this read the notes directory rather than wherever the process happened to start.
+// Newer majors dropped the option entirely, so this is one of the calls to check first.
 function noteFiles() {
-  const paths = glob.sync('*.md', { root: NOTES_DIR, nodir: true });
+  const paths = glob.sync('/*.md', { root: NOTES_DIR, nodir: true });
   return paths.sort();
 }
 
