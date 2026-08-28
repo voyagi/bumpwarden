@@ -46,6 +46,18 @@ describe('text from somebody else, on the way to a terminal', () => {
     expect(safe).toContain('[+40 characters not shown]');
   });
 
+  /**
+   * The cap is a limit on room taken on screen, and each control character takes four characters
+   * once it is written out. Measuring the value that arrived rather than the one that is printed
+   * would let a string of nothing but escapes sit under the cap and spend four times the room.
+   */
+  it('holds the cap against what is printed, not what arrived', () => {
+    const escapes = ESC.repeat(UNBOUNDED_FIELD_CAP);
+    const safe = safeForTerminal(escapes, UNBOUNDED_FIELD_CAP);
+    expect(safe).toContain('characters not shown');
+    expect([...safe].length).toBeLessThan(UNBOUNDED_FIELD_CAP + 40);
+  });
+
   it('counts and cuts by character, so one is never left as half of itself', () => {
     // An astral character is two code units, so a cut that counted units would split the last one
     // and report a number that did not match the word beside it.

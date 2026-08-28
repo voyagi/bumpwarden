@@ -236,6 +236,27 @@ describe('the issue body', () => {
       expect(whatChanged('filed `send`#4212 upstream')).toContain('#<!---->4212');
     });
 
+    /**
+     * A changelog can spell either sigil without typing one. Markdown turns a character reference
+     * into the character it names before GitHub looks for handles, so an encoded `@` arrives at
+     * that filter as a live mention. And GitHub links a repository-qualified reference too, where
+     * the `#` follows a letter and the plain rule deliberately does not fire.
+     */
+    it.each([
+      ['an encoded at sign', 'thanks &#64;octocat', '@<!---->octocat'],
+      ['an encoded at sign in hex', 'thanks &#x40;octocat', '@<!---->octocat'],
+      ['a named at sign', 'thanks &commat;octocat', '@<!---->octocat'],
+      ['an encoded hash', 'see &#35;4212', '#<!---->4212'],
+      ['a repository-qualified reference', 'see owner/repository#4212', 'repository#<!---->4212'],
+    ])('makes %s inert too', (_label, text, expected) => {
+      expect(whatChanged(text)).toContain(expected);
+    });
+
+    it('leaves a reference that names something else alone', () => {
+      // Only the two sigils are rewritten, so an apostrophe still reads as an apostrophe.
+      expect(whatChanged('the parser&#39;s output changed')).toContain('&#39;');
+    });
+
     it('leaves a version, an anchor and an entity as the reader expects them', () => {
       const body = whatChanged('upgrade pkg@2.0.0, read notes#12, mind the parser&#39;s output');
       expect(body).toContain('pkg@2.0.0');

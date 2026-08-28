@@ -44,12 +44,15 @@ What that means, honestly:
   nothing outside Firestore holds them. Export the collection if you need the log to be complete.
 - The watched-repositories list is seeded at boot from `DEMO_REPO`. Any repository you added with
   `npm run watch` has to be added again.
-- A stuck run (`409` on "Run now", `run started` with no `run finished`) holds a lease document
-  under `locks/`. Which one depends on what it covers: `locks/run` for a run over the whole watch
-  list, `locks/run:scoped` for a project-scoped press, and `locks/run:owner__repo` for the
-  repository itself (the id is the key with each `/` written as `__`). A `repository skipped` line
-  in the logs means a watch-list run found a repository already held and left it alone rather than
-  reading it twice; that repository is not dated by that run. **Wait for it to expire.** Twenty
+- A `409` on "Run now", or `run started` with no `run finished`, means a lease is held. That is the
+  ordinary shape of a run that is still going, so read it as busy first and as stuck only once you
+  have confirmed the execution ended, or that the lease has outlived the run that took it.
+  The lease is a document under `locks/`, and which one depends on what it covers: `locks/run` for
+  a run over the whole watch list, `locks/run:scoped` for a project-scoped press, and
+  `locks/run:owner__repo` for the repository itself (the id is the key with each `/` written as
+  `__`). A `repository held` line in the logs means a watch-list run found a repository already
+  leased and left it alone rather than reading it twice; that repository is not dated by that run.
+  Once a run really is stuck: **wait for the lease to expire.** Twenty
   minutes is the whole remedy, and it is the safe one. Deleting the lease by hand only looks
   faster: moving traffic to another revision does not end a request already running on the old
   one, so a run you assumed was dead can still be writing to Firestore and posting to GitHub, and a

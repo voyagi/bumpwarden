@@ -107,6 +107,24 @@ const INERT = '<!---->';
 const MENTION =
   /(?<![A-Za-z\d])@([A-Za-z\d](?:-?[A-Za-z\d]){0,38}(?:\/[A-Za-z\d_-](?:[A-Za-z\d._-]{0,58}[A-Za-z\d_-])?)?)/g;
 const ISSUE_REF = /(?<![A-Za-z\d&#])#(\d{1,7})\b/g;
+/**
+ * GitHub links `owner/repository#123` as well as a bare `#123`, and there the `#` follows a letter,
+ * so the rule above deliberately does not fire on it. This one does, without disturbing an anchor
+ * (`notes#12`) or a line reference (`file.ts#L4`), neither of which carries a slash before a digit.
+ */
+const QUALIFIED_REF = /(?<=[A-Za-z\d][\w.-]{0,64}\/[\w.-]{1,64})#(\d{1,7})\b/g;
+/**
+ * The ways a changelog can spell `@` or `#` without typing one. CommonMark turns a character
+ * reference into the character it names before GitHub goes looking for handles, so `&#64;octocat`
+ * arrives at that filter as a live mention. Rewriting the reference to the character it means puts
+ * it in front of the rules above instead of past them, and the reader sees the same thing either
+ * way. A reference naming anything else, `&#39;` included, is left exactly as written.
+ */
+const ENCODED_SIGIL = /&(?:#0*(?:64|35)|#[xX]0*(?:40|23)|commat|num);/g;
+
+function decodedSigil(reference: string): string {
+  return /64|40|commat/.test(reference) ? '@' : '#';
+}
 /** Every markdown link and image opens with this, so escaping it is what stops the whole family. */
 const LINK_OPENER = /(\\*)\[/g;
 /**
@@ -171,7 +189,9 @@ function leaveAlone(line: string): Array<[number, number]> {
 function neutralised(text: string): string {
   return text
     .replace(/`/g, '\\`')
+    .replace(ENCODED_SIGIL, decodedSigil)
     .replace(MENTION, (_match, handle: string) => `@${INERT}${handle}`)
+    .replace(QUALIFIED_REF, (_match, digits: string) => `#${INERT}${digits}`)
     .replace(ISSUE_REF, (_match, digits: string) => `#${INERT}${digits}`)
     .replace(LINK_OPENER, (match, escapes: string) =>
       // An odd run of backslashes already escaped this bracket, so it opens nothing and adding

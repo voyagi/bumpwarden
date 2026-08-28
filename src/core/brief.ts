@@ -195,22 +195,41 @@ export interface ClaimGround {
  * A single http(s) token with no whitespace in it, so a sentence cannot ride in whatever it says.
  */
 const ONE_URL = /^https?:\/\/\S+$/i;
+/** The addresses the material itself carries, each as a whole token rather than as a substring. */
+const URLS_IN_TEXT = /https?:\/\/[^\s<>"')\]]+/gi;
+
+/**
+ * What a claim's source says when the run had no address to offer: no release notes page existed,
+ * so the quote came from the commit subjects and changed file names the agent was given. Naming
+ * that is honest, where printing a sentinel meant for a prompt would read as a broken address.
+ */
+const READ_MATERIAL = 'the commit subjects and changed files this run read';
 
 /**
  * Answers with the citation to publish. The run's own resolved address is the agent's fact and is
- * always allowed; anything else has to be a lone URL the material itself carries. A citation that
- * is neither is REPLACED by the run's address rather than dropping the claim.
+ * always allowed; anything else has to be an address the material itself carries, matched as a
+ * whole token. A citation that is neither is REPLACED rather than dropping the claim.
  *
- * Replacing rather than dropping is the whole design. A drop would hand the package author a way to
- * delete the one claim carrying the warning a reader needed, by writing a citation they knew would
- * be refused; the reader would see a brief that looked complete. Replacing costs the attacker
- * nothing they had, and costs the reader nothing they needed.
+ * Whole-token matching is the point of `URLS_IN_TEXT`. A plain substring test would accept
+ * `https://evil.example` on the strength of a trusted address that merely carried it as a query
+ * value, and the reader would be handed the attacker's host under a claim about their own code.
+ *
+ * Replacing rather than dropping is the rest of the design. A drop would hand the package author a
+ * way to delete the one claim carrying the warning a reader needed, by writing a citation they
+ * knew would be refused; the reader would see a brief that looked complete. Replacing costs the
+ * attacker nothing they had, and costs the reader nothing they needed.
  */
 function cite(source: string, ground: ClaimGround): string {
   const cited = source.trim();
-  if (cited === ground.notesSource.trim()) return cited;
-  if (ONE_URL.test(cited) && ground.evidence.includes(cited)) return cited;
-  return ground.notesSource;
+  const ours = ground.notesSource.trim();
+  if (cited === ours) return cited;
+
+  if (ONE_URL.test(cited)) {
+    for (const found of ground.evidence.matchAll(URLS_IN_TEXT)) {
+      if (found[0] === cited) return cited;
+    }
+  }
+  return ONE_URL.test(ours) ? ours : READ_MATERIAL;
 }
 
 export interface VerifiedClaims {

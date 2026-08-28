@@ -50,17 +50,20 @@ function neutralise(text: string, keepLineFeed: boolean): string {
  * output. The cut is always stated rather than silent.
  */
 export function safeForTerminal(text: string, maxChars?: number): string {
-  if (maxChars === undefined) return neutralise(text, false);
+  const written = neutralise(text, false);
+  if (maxChars === undefined) return written;
 
-  // Counted and cut by character rather than by code unit, so an emoji or any other astral
-  // character at the boundary is not left as half of itself, and the number the reader is given
-  // is the number of characters the sentence beside it claims.
-  const characters = [...text];
-  if (characters.length <= maxChars) return neutralise(text, false);
+  // Measured on what is written, not on what arrived. Each control character becomes four
+  // characters on screen, so a value of nothing but escapes would sit under a cap applied to the
+  // input and still spend four times the room the cap promises.
+  //
+  // Counted and cut by character rather than by code unit, so an emoji at the boundary is not
+  // left as half of itself, and the number is the number the sentence beside it claims.
+  const characters = [...written];
+  if (characters.length <= maxChars) return written;
 
-  const shown = characters.slice(0, maxChars).join('');
   const hidden = characters.length - maxChars;
-  return neutralise(`${shown} ... [+${hidden} characters not shown]`, false);
+  return `${characters.slice(0, maxChars).join('')} ... [+${hidden} characters not shown]`;
 }
 
 /**

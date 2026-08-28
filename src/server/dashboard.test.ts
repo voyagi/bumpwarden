@@ -491,6 +491,11 @@ describe('what the crawlers read', () => {
       '/fonts/.test-marker',
       '/fonts/%2Etest-marker',
       '/fonts/%2etest-marker',
+      // Encoded twice. The router decodes once and the file resolver decodes again, so this is the
+      // spelling that reaches the disk as a dot through two well-formed decodes rather than
+      // through the fallback a malformed escape takes.
+      '/fonts/%252Etest-marker',
+      // Malformed on purpose: a partial decode is a different route to the same file.
       '/fonts/%%32%45test-marker',
     ];
     await writeFile(marker, 'local only', 'utf8');
