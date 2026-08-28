@@ -128,4 +128,53 @@ describe('the Run now control', () => {
     });
     expect(runNowStatus(DEMO, [scheduled], NOW).message).toContain('06:04:00 UTC in 4m 0s');
   });
+
+  /**
+   * A run that stepped over this project because something else held it never read it, so dating
+   * the project by it would tell a visitor their dependencies were checked when nobody looked.
+   */
+  it('does not date the project by a run that stepped over it', () => {
+    const stepped = runRecord({
+      trigger: 'scheduled',
+      scope: null,
+      startedAt: '2026-08-21T06:00:00.000Z',
+      finishedAt: '2026-08-21T06:04:00.000Z',
+      repositories: [
+        {
+          repositoryId: DEMO.id,
+          dependenciesConsidered: 0,
+          counts: { green: 0, amber: 0, red: 0 },
+          actions: 0,
+          missing: [],
+          error: 'another run holds this repository, so this run left it alone',
+          skipped: true,
+        },
+      ],
+    });
+    expect(runNowStatus(DEMO, [stepped], NOW).message).toContain('No run has covered this project');
+  });
+
+  /**
+   * A repository that was read and failed is different: something looked, and the failure is the
+   * run's own to report. Counting it keeps the date honest without hiding the error.
+   */
+  it('still dates the project by a run that read it and failed', () => {
+    const failed = runRecord({
+      trigger: 'scheduled',
+      scope: null,
+      startedAt: '2026-08-21T06:00:00.000Z',
+      finishedAt: '2026-08-21T06:04:00.000Z',
+      repositories: [
+        {
+          repositoryId: DEMO.id,
+          dependenciesConsidered: 0,
+          counts: { green: 0, amber: 0, red: 0 },
+          actions: 0,
+          missing: [],
+          error: 'the repository could not be processed',
+        },
+      ],
+    });
+    expect(runNowStatus(DEMO, [failed], NOW).message).toContain('06:04:00 UTC in 4m 0s');
+  });
 });

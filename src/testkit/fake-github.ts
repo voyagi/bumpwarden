@@ -1,4 +1,9 @@
-import { ROUTES, type GitHubRequest, type GitHubResponse } from '../io/github-actor.js';
+import {
+  ROUTES,
+  VIEWER_ROUTE,
+  type GitHubRequest,
+  type GitHubResponse,
+} from '../io/github-actor.js';
 
 export interface RecordedCall {
   route: string;
@@ -26,6 +31,8 @@ interface StoredComment {
 export interface FakeGitHubOptions {
   defaultBranch?: string;
   canPush?: boolean;
+  /** The login the token acts under, and so the author of everything it writes here. */
+  viewer?: string;
   files?: Record<string, string>;
   issues?: Array<Partial<StoredIssue>>;
   comments?: Array<Partial<StoredComment>>;
@@ -117,6 +124,7 @@ function paged<T>(rows: T[], params: Record<string, unknown>): T[] {
  */
 export function fakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   const defaultBranch = options.defaultBranch ?? 'main';
+  const viewer = options.viewer ?? 'bumpwarden';
   const calls: RecordedCall[] = [];
   const labels = new Set<string>();
   const branches = new Set<string>([defaultBranch]);
@@ -138,6 +146,8 @@ export function fakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   }
 
   const handlers: Record<string, Handler> = {
+    [VIEWER_ROUTE]: () => ({ status: 200, data: { login: viewer } }),
+
     [ROUTES.repository]: () => ({
       status: 200,
       data: { default_branch: defaultBranch, permissions: { push: options.canPush ?? true } },
@@ -178,7 +188,7 @@ export function fakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
         labels: (params.labels as string[]) ?? [],
         state: 'open',
         isPullRequest: false,
-        author: 'bumpwarden',
+        author: viewer,
         headRef: null,
       };
       issues.push(issue);
@@ -204,7 +214,7 @@ export function fakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
         id: (nextCommentId += 1),
         issueNumber: Number(params.issue_number),
         body: String(params.body),
-        author: 'bumpwarden',
+        author: viewer,
       };
       comments.push(comment);
       return { status: 201, data: commentJson(comment) };
@@ -266,7 +276,7 @@ export function fakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
         labels: [],
         state: 'open',
         isPullRequest: true,
-        author: 'bumpwarden',
+        author: viewer,
         headRef: String(params.head),
       };
       issues.push(pull);

@@ -49,6 +49,12 @@ export interface RepositoryResult {
   actions: number;
   missing: MissingSource[];
   error: string | null;
+  /**
+   * True when another run held this repository and this one left it alone. Kept apart from `error`
+   * because "nobody read it this time" and "reading it went wrong" are different answers, and a
+   * page that dates a project by its last run must not count either as coverage.
+   */
+  skipped?: boolean;
 }
 
 export interface RunRecord {

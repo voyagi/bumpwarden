@@ -5,6 +5,7 @@ import { ruleFor } from '../../core/policy.js';
 import { scoreBump } from '../../core/scorer.js';
 import type { Band } from '../../core/types.js';
 import { RunFetcher, type FetchLike } from '../../io/http.js';
+import { UNBOUNDED_FIELD_CAP, safeForTerminal } from '../../io/terminal.js';
 import { ingestRepository } from '../../orchestrator/ingest.js';
 import { collectSourceFiles } from '../../orchestrator/source-files.js';
 
@@ -96,18 +97,26 @@ console.log(`${REPO}: ${files.length} files, ${ingest.dependenciesConsidered} de
 console.log(`source files the usage matcher saw: ${sources.files.length}\n`);
 
 for (const { candidate, score } of scored) {
-  const move = `${candidate.dependency} ${candidate.currentVersion} -> ${candidate.candidateVersion}`;
+  const move = safeForTerminal(
+    `${candidate.dependency} ${candidate.currentVersion} -> ${candidate.candidateVersion}`,
+    UNBOUNDED_FIELD_CAP,
+  );
   console.log(`${String(score.total).padStart(3)} ${score.band.padEnd(5)} ${move}`);
   console.log(`    ${ruleFor(score.band).id}: ${ruleFor(score.band).kind}`);
   for (const factor of score.factors.filter((entry) => entry.points > 0)) {
-    console.log(`    +${String(factor.points).padStart(2)} ${factor.id}: ${factor.evidence}`);
+    console.log(
+      `    +${String(factor.points).padStart(2)} ${factor.id}: ${safeForTerminal(factor.evidence, UNBOUNDED_FIELD_CAP)}`,
+    );
   }
 }
 
 const missing = [...sources.missing, ...ingest.missing];
 if (missing.length > 0) {
   console.log(`\nsources recorded as missing (${missing.length}):`);
-  for (const gap of missing) console.log(`    ${gap.what}: ${gap.why}`);
+  for (const gap of missing)
+    console.log(
+      `    ${safeForTerminal(gap.what, UNBOUNDED_FIELD_CAP)}: ${safeForTerminal(gap.why, UNBOUNDED_FIELD_CAP)}`,
+    );
 }
 
 const bands = new Set<Band>(scored.map((entry) => entry.score.band));

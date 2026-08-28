@@ -4,6 +4,7 @@ import { FirestoreStore } from '../../io/firestore-store.js';
 import { RunFetcher } from '../../io/http.js';
 import { MemoryStore } from '../../io/memory-store.js';
 import type { BumpwardenStore } from '../../io/store.js';
+import { UNBOUNDED_FIELD_CAP, safeForTerminal } from '../../io/terminal.js';
 import { executeRun, type RunDependencies } from '../../orchestrator/run.js';
 
 /**
@@ -86,18 +87,25 @@ const bumps = await store.listBumps({ repositoryId: id, limit: 200 });
 bumps.sort((left, right) => right.score.total - left.score.total);
 
 for (const bump of bumps) {
-  const move = `${bump.dependency} ${bump.currentVersion} -> ${bump.candidateVersion}`;
+  const move = safeForTerminal(
+    `${bump.dependency} ${bump.currentVersion} -> ${bump.candidateVersion}`,
+    UNBOUNDED_FIELD_CAP,
+  );
   const action = bump.action;
   console.log(`${String(bump.score.total).padStart(3)} ${bump.score.band.padEnd(5)} ${move}`);
   console.log(
-    action ? `    ${action.ruleId} ${action.kind}: ${action.detail}` : '    no action recorded',
+    action
+      ? `    ${action.ruleId} ${action.kind}: ${safeForTerminal(action.detail)}`
+      : '    no action recorded',
   );
-  console.log(`    brief ${bump.brief.status}${bump.brief.reason ? `: ${bump.brief.reason}` : ''}`);
+  console.log(
+    `    brief ${bump.brief.status}${bump.brief.reason ? `: ${safeForTerminal(bump.brief.reason)}` : ''}`,
+  );
   if (bump.brief.content) {
-    console.log(`    "${bump.brief.content.headline}"`);
+    console.log(`    "${safeForTerminal(bump.brief.content.headline)}"`);
     for (const claim of bump.brief.content.breaksHere) {
       console.log(
-        `      ${claim.path}:${claim.line} ${claim.verified ? 'verified' : 'unverified'}`,
+        `      ${safeForTerminal(claim.path)}:${claim.line} ${claim.verified ? 'verified' : 'unverified'}`,
       );
     }
   }
@@ -107,7 +115,10 @@ const considered = run.repositories.reduce((sum, r) => sum + r.dependenciesConsi
 const gaps = run.repositories.flatMap((result) => result.missing);
 if (gaps.length > 0) {
   console.log(`\nsources recorded as missing (${gaps.length}):`);
-  for (const gap of gaps) console.log(`    ${gap.what}: ${gap.why}`);
+  for (const gap of gaps)
+    console.log(
+      `    ${safeForTerminal(gap.what, UNBOUNDED_FIELD_CAP)}: ${safeForTerminal(gap.why, UNBOUNDED_FIELD_CAP)}`,
+    );
 }
 
 const seconds = ((Date.now() - started) / 1000).toFixed(1);

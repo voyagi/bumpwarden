@@ -206,6 +206,7 @@ export async function writeBrief(
     const verified = verifyClaims(outcome.payload.breaksHere, {
       sites: request.usageSites,
       evidence: material.evidence,
+      notesSource: material.releaseNotesSource,
     });
 
     const record: BriefRecord = {

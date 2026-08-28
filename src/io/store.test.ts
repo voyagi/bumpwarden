@@ -15,7 +15,34 @@ import {
 } from '../testkit/fixtures.js';
 import { FirestoreStore } from './firestore-store.js';
 import { MemoryStore } from './memory-store.js';
-import { RUN_CLAIM_KEY, type BumpwardenStore, type RunClaim } from './store.js';
+import { documentId } from '../core/bump-key.js';
+import {
+  RUN_CLAIM_KEY,
+  SCOPED_RUN_CLAIM_KEY,
+  repositoryClaimKey,
+  type BumpwardenStore,
+  type RunClaim,
+} from './store.js';
+
+/**
+ * Every lease becomes a document named from its key, so a derivation that folded two of them onto
+ * one id would quietly put the single global lease back and undo the reason these keys exist.
+ */
+describe('what a lease key becomes on disk', () => {
+  it('gives each repository, the scoped slot and the watch list their own document', () => {
+    const ids = [
+      documentId(RUN_CLAIM_KEY),
+      documentId(SCOPED_RUN_CLAIM_KEY),
+      documentId(repositoryClaimKey('demo/app')),
+      documentId(repositoryClaimKey('demo/other')),
+      // A repository literally named to collide with the scoped slot still gets its own document.
+      documentId(repositoryClaimKey('run/scoped')),
+    ];
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(documentId(repositoryClaimKey('demo/app'))).toBe('run:demo__app');
+    expect(ids.every((id) => !id.includes('/'))).toBe(true);
+  });
+});
 
 function claim(holder: string): RunClaim {
   return {

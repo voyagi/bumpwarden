@@ -29,10 +29,15 @@ the deploy steps in [../README.md](../README.md); if those change, this changes 
   marked as the demo, one run per project per five minutes, answering 409 while a run is going. The
   cooldown is keyed on the project rather than on the visitor: this instance has no accounts, and an
   IP address is personal data it has no reason to hold.
-- **One run exists at a time, and a lease says so, not a status read.** Before a run reads or
-  writes anything it takes a lease in Firestore inside a transaction, so presses that arrive
-  together, or on different instances of the service, do not each start a run of their own. The
-  lease expires, so a container killed mid-run does not leave the button dead.
+- **A lease says what is running, not a status read, and it names what it covers.** Before a run
+  reads or writes anything it takes a lease in Firestore inside a transaction, so presses that
+  arrive together, or on different instances of the service, do not each start a run of their own.
+  A run over the whole watch list takes `run`; every project-scoped press shares `run:scoped`; and
+  each repository is taken as it is reached, under `run:<owner>/<repo>`. So no two runs ever read
+  and write one repository at once, while a press authorised for the demo project cannot turn the
+  scheduler away from the rest of the list. The ceiling is one watch-list run beside one scoped
+  run. A watch-list run that finds a repository held records it as left alone and covers the rest.
+  Every lease expires, so a container killed mid-run does not leave the button dead.
 
 ## What a browser is allowed to do with a page
 
@@ -59,9 +64,11 @@ bumpwarden can do to a repository: with read access only, every action is record
 ## What it writes
 
 - **GitHub**: issues, pull requests, and comments on bot pull requests, in the watched repositories
-  only. Every route re-applies the owner and repository from the actor's constructor, so no call can
-  leave the repository it was built for. There is no merge, and the union of actions the code can
-  take has no merge member.
+  only. Every route that names a repository re-applies the owner and repository from the actor's
+  constructor, so no call can leave the repository it was built for. One route names none: a read of
+  the login the token acts under, which is how a comment bumpwarden wrote is told apart from one
+  somebody else left carrying the same marker. There is no merge, and the union of actions the code
+  can take has no merge member.
 - **Firestore**: runs, bumps, briefs, actions and the watch list, in the same region.
 - **Logs**: one JSON object per line to stdout, with the run id, scores, bands, rules and outcomes.
 
@@ -81,13 +88,16 @@ by Google to improve its products, and what is sent is public release notes and 
   write tool, and every claim it returns is checked against the material it was given before it is
   shown. Prompt text in a changelog can waste a call. It cannot reach GitHub.
 - **A public run trigger costs money in principle.** In practice it is one repository, rate-limited,
-  bounded by a call budget per run and by the brief and action budgets, held to one run at a time
-  by the lease above, and the whole thing sits inside free tiers.
+  bounded by a call budget per run and by the brief and action budgets, and held by the leases above
+  to one scoped run beside one watch-list run, and the whole thing sits inside free tiers. Two runs
+  on two instances do not share the model pacer, so a busy moment can ask for more than the free
+  tier's minute allows; the API refuses the surplus and that run records a brief as unavailable
+  rather than spending anything it was not owed.
 - **Every outbound read belongs to somebody else.** Each carries its own twenty second deadline and
-  a size cap, at most 4 go out at once (GitHub allows 100 concurrent requests and 900 read points a
-  minute, and npm's own client opens 15 sockets per host), and a source that hangs, resets or floods
-  becomes a recorded missing source rather than a run that never returns. Proven against a real
-  server on a real port, not a mock.
+  a size cap, at most 4 go out at once in a run and so 8 across the two a busy moment allows (GitHub
+  allows 100 concurrent requests and 900 read points a minute, and npm's own client opens 15 sockets
+  per host), and a source that hangs, resets or floods becomes a recorded missing source rather than
+  a run that never returns. Proven against a real server on a real port, not a mock.
 - **The model is asked for at most 2 briefs at once.** A brief depends on nothing but its own
   material, so the riskiest bumps are briefed together rather than in turn, while a pacer keeps
   the whole run inside the 5 requests a minute the free tier allows, a refusal's named wait holds

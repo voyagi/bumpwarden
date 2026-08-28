@@ -141,25 +141,54 @@ function bodyInput(context: ActContext, inputs: ActInputs): BodyInput {
   };
 }
 
+/**
+ * What the audit row says beyond the action itself. Both cases belong there: a marker under another
+ * login is either a comment from a token that has since been replaced or somebody trying to have
+ * the brief written into text they can rewrite afterwards, and a login this token cannot read is
+ * the reason a re-run left a second comment instead of editing the first.
+ */
+function markerNote(selfLogin: string | null, carrying: number, mine: boolean): string {
+  if (!selfLogin) {
+    return carrying > 0 ? '; the login this token acts under could not be read' : '';
+  }
+
+  const others = carrying - (mine ? 1 : 0);
+  if (others === 0) return '';
+  return `; ${others} ${others === 1 ? 'comment carries' : 'comments carry'} the same marker under another login`;
+}
+
+/**
+ * The marker says which bump a comment is about. It does not say who wrote it: it is an HTML
+ * comment in a body anyone who can comment on the bot's pull request may copy, so treating the
+ * marker as proof handed the agent away. A stranger who planted one first would have had the brief
+ * written into their comment on every run, bumpwarden would have left none of its own, and the url
+ * in the audit log would point at text they can rewrite the moment the run ends. The login decides
+ * and the marker only narrows, which is what makes `mine` its name.
+ */
 async function commentOnBotPullRequest(
   actor: RepositoryActor,
   target: BotPullRequest,
   input: BodyInput,
 ): Promise<ActionShape> {
   const body = botCommentBody(input);
-  const mine = (await actor.listComments(target.number)).find((comment) =>
+  const selfLogin = await actor.selfLogin();
+  const carrying = (await actor.listComments(target.number)).filter((comment) =>
     bodyCarriesKey(comment.body, input.bump.key),
   );
+  const mine = selfLogin
+    ? carrying.find((comment) => comment.author.toLowerCase() === selfLogin.toLowerCase())
+    : undefined;
 
   const comment = mine
     ? await actor.updateComment(mine.id, body)
     : await actor.createComment(target.number, body);
 
+  const note = markerNote(selfLogin, carrying.length, mine !== undefined);
   return {
     outcome: 'commented',
     url: comment.url || target.url,
     number: target.number,
-    detail: `${mine ? 'updated' : 'left'} a comment on ${target.bot} #${target.number}`,
+    detail: `${mine ? 'updated' : 'left'} a comment on ${target.bot} #${target.number}${note}`,
   };
 }
 

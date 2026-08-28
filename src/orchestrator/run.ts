@@ -35,7 +35,12 @@ import type { RepoRef } from '../io/github.js';
 import type { RunFetcher } from '../io/http.js';
 import { mapInFlight } from '../io/in-flight.js';
 import { silentLogger, type Logger } from '../io/log.js';
-import { RUN_CLAIM_KEY, type BumpwardenStore } from '../io/store.js';
+import {
+  RUN_CLAIM_KEY,
+  SCOPED_RUN_CLAIM_KEY,
+  repositoryClaimKey,
+  type BumpwardenStore,
+} from '../io/store.js';
 import { actOnBump, type ActContext } from './act.js';
 import { ingestRepository } from './ingest.js';
 import { collectSourceFiles } from './source-files.js';
@@ -476,6 +481,34 @@ export class RunInProgressError extends Error {
 const CLAIM_LEASE_MS = (RUN_TIME_BUDGET_SECONDS + 600) * 1000;
 
 /**
+ * Claims one lease and hands back the release, or null when something else holds it. Releasing
+ * never rejects: a rejection would replace whatever the run returned or threw, turning a finished
+ * run into a store error the caller answers 500 to, and a lease left behind expires on its own.
+ */
+async function takeLease(
+  deps: RunDependencies,
+  key: string,
+  runId: string,
+  at: Date,
+): Promise<(() => Promise<void>) | null> {
+  const holder = randomUUID();
+  const claimed = await deps.store.claimRun({
+    key,
+    holder,
+    runId,
+    claimedAt: at.toISOString(),
+    expiresAt: new Date(at.getTime() + CLAIM_LEASE_MS).toISOString(),
+  });
+  if (!claimed) return null;
+
+  return async () => {
+    await deps.store.releaseRun(key, holder).catch((error: unknown) => {
+      (deps.logger ?? silentLogger).error('lease not released', { runId, key, error });
+    });
+  };
+}
+
+/**
  * The one run path. Cloud Scheduler's OIDC call and the dashboard's "Run now" both land here and
  * differ only in the recorded trigger, so what a judge sees after pressing the button is the same
  * artifact the nightly run produces.
@@ -486,25 +519,23 @@ export async function executeRun(deps: RunDependencies, options: RunOptions): Pr
 
   // Claimed before anything is read or written. The status check in front of the button is a
   // courtesy that tells a visitor why; this is the thing that actually stops a second run.
-  const holder = randomUUID();
-  const claimed = await deps.store.claimRun({
-    key: RUN_CLAIM_KEY,
-    holder,
-    runId: id,
-    claimedAt: startedAt.toISOString(),
-    expiresAt: new Date(startedAt.getTime() + CLAIM_LEASE_MS).toISOString(),
-  });
-  if (!claimed) throw new RunInProgressError();
+  //
+  // A scoped run takes the shared scoped slot and its own repository. A whole-watch-list run takes
+  // the watch-list lease and then each repository as it reaches it, so a press authorised for one
+  // project can no longer shut out a scheduled run over every other one.
+  const scope = options.repositoryId ?? null;
+  const releases: Array<() => Promise<void>> = [];
+  const keys = scope ? [SCOPED_RUN_CLAIM_KEY, repositoryClaimKey(scope)] : [RUN_CLAIM_KEY];
 
   try {
+    for (const key of keys) {
+      const release = await takeLease(deps, key, id, startedAt);
+      if (!release) throw new RunInProgressError();
+      releases.push(release);
+    }
     return await runClaimed(deps, options, id, startedAt);
   } finally {
-    // A rejection here would replace whatever the run returned or threw, turning a finished run
-    // into a store error the caller answers 500 to. The lease expires on its own, so failing to
-    // hand it back early is a delay rather than a fault.
-    await deps.store.releaseRun(RUN_CLAIM_KEY, holder).catch((error: unknown) => {
-      (deps.logger ?? silentLogger).error('lease not released', { runId: id, error });
-    });
+    for (const release of releases.reverse()) await release();
   }
 }
 
@@ -554,6 +585,27 @@ async function runClaimed(
   const allowance = allowanceFor(options);
   const results: RepositoryResult[] = [];
   for (const repository of repositories) {
+    // A scoped run already holds its one repository from executeRun. A watch-list run takes each
+    // repository as it reaches it, and steps over one another run is holding rather than refusing
+    // the whole run: the other repositories on the list still deserve their scan.
+    let release: (() => Promise<void>) | null = null;
+    if (!options.repositoryId) {
+      release = await takeLease(deps, repositoryClaimKey(repository.id), id, deps.now());
+      if (!release) {
+        logger.info('repository held', { runId: id, repository: repository.id });
+        results.push({
+          repositoryId: repository.id,
+          dependenciesConsidered: 0,
+          counts: { ...ZERO_COUNTS },
+          actions: 0,
+          missing: [],
+          error: 'another run holds this repository, so this run left it alone',
+          skipped: true,
+        });
+        continue;
+      }
+    }
+
     try {
       results.push(
         await runRepository(deps, options, repository, id, deps.now(), deadline, allowance),
@@ -568,6 +620,8 @@ async function runClaimed(
         missing: [],
         error: error instanceof Error ? error.message : 'the repository could not be processed',
       });
+    } finally {
+      if (release) await release();
     }
   }
 

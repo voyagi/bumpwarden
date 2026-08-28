@@ -6,7 +6,12 @@ import { BRIEFS_IN_FLIGHT } from '../core/stack.js';
 import { RunFetcher } from '../io/http.js';
 import { createLogger } from '../io/log.js';
 import { MemoryStore } from '../io/memory-store.js';
-import { RUN_CLAIM_KEY, type BumpwardenStore } from '../io/store.js';
+import {
+  RUN_CLAIM_KEY,
+  SCOPED_RUN_CLAIM_KEY,
+  repositoryClaimKey,
+  type BumpwardenStore,
+} from '../io/store.js';
 import { deferred } from '../testkit/deferred.js';
 import { fakeGitHub, type FakeGitHub } from '../testkit/fake-github.js';
 import { DEMO, MANIFEST_JSON, NOW } from '../testkit/fixtures.js';
@@ -377,6 +382,73 @@ describe('the trigger', () => {
 
     const run = await executeRun(context.deps, { trigger: 'manual', repositoryId: DEMO.id });
     expect(run.repositories.map((result) => result.repositoryId)).toEqual([DEMO.id]);
+  });
+});
+
+/**
+ * "Run now" is public and authorised for one demo project. A single global lease let an anonymous
+ * press hold the whole watch list, so the operator's scheduled scan of every other repository was
+ * turned away at a moment a visitor chose off the published schedule.
+ */
+describe('what a run holds while it goes', () => {
+  async function hold(context: Harness, key: string): Promise<void> {
+    const claimed = await context.store.claimRun({
+      key,
+      holder: 'someone-else',
+      runId: 'held',
+      claimedAt: NOW.toISOString(),
+      expiresAt: new Date(NOW.getTime() + 60_000).toISOString(),
+    });
+    expect(claimed).toBe(true);
+  }
+
+  it('leaves the rest of the watch list to the scheduler while a scoped run is going', async () => {
+    const context = await harness();
+    await context.store.putWatchedRepository({ ...DEMO, id: 'demo/other', repo: 'other' });
+    await hold(context, SCOPED_RUN_CLAIM_KEY);
+    await hold(context, repositoryClaimKey(DEMO.id));
+
+    const run = await executeRun(context.deps, { trigger: 'scheduled' });
+
+    const stepped = run.repositories.find((result) => result.repositoryId === DEMO.id);
+    const covered = run.repositories.find((result) => result.repositoryId === 'demo/other');
+    expect(stepped?.skipped).toBe(true);
+    expect(covered?.skipped).toBeUndefined();
+  });
+
+  it('lets one scoped run go at a time, whichever project it covers', async () => {
+    const context = await harness();
+    await context.store.putWatchedRepository({ ...DEMO, id: 'demo/other', repo: 'other' });
+    await hold(context, SCOPED_RUN_CLAIM_KEY);
+
+    await expect(
+      executeRun(context.deps, { trigger: 'manual', repositoryId: 'demo/other' }),
+    ).rejects.toBeInstanceOf(RunInProgressError);
+  });
+
+  it('refuses a scoped run over a repository another run is reading', async () => {
+    const context = await harness();
+    await hold(context, repositoryClaimKey(DEMO.id));
+
+    await expect(
+      executeRun(context.deps, { trigger: 'manual', repositoryId: DEMO.id }),
+    ).rejects.toBeInstanceOf(RunInProgressError);
+  });
+
+  it('hands every lease back when the run is done', async () => {
+    const context = await harness();
+    await executeRun(context.deps, { trigger: 'scheduled' });
+
+    for (const key of [RUN_CLAIM_KEY, repositoryClaimKey(DEMO.id)]) {
+      const free = await context.store.claimRun({
+        key,
+        holder: 'after',
+        runId: 'after',
+        claimedAt: NOW.toISOString(),
+        expiresAt: new Date(NOW.getTime() + 60_000).toISOString(),
+      });
+      expect(free).toBe(true);
+    }
   });
 });
 

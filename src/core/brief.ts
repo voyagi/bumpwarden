@@ -6,7 +6,7 @@ import type { UsageSite } from './types.js';
  * It belongs in the cache key rather than in a migration: a brief is cheap to recompute and
  * expensive to misread.
  */
-export const BRIEF_SCHEMA_VERSION = '1.0.0';
+export const BRIEF_SCHEMA_VERSION = '1.1.0';
 
 /**
  * A closed schema with a length cap on every string. The agent reads release notes written by
@@ -156,25 +156,80 @@ const AUTHORITY_CLAIMS: ReadonlyArray<readonly [string, RegExp]> = [
  * verbatim in the material, so checking those would hand any package author a way to suppress
  * every brief about their release by naming this tool once in a changelog.
  */
-export function claimsAuthority(content: BriefPayload): string | null {
-  const prose = [
-    content.headline,
-    content.whatChanged,
-    ...content.breakingChanges,
-    ...content.migrationSteps,
-  ].join('\n');
-
+function overstepIn(text: string): string | null {
   for (const [named, pattern] of AUTHORITY_CLAIMS) {
-    if (pattern.test(prose)) return named;
+    if (pattern.test(text)) return named;
   }
   return null;
 }
+
+export function claimsAuthority(content: BriefPayload): string | null {
+  return overstepIn(
+    [
+      content.headline,
+      content.whatChanged,
+      ...content.breakingChanges,
+      ...content.migrationSteps,
+    ].join('\n'),
+  );
+}
+
+/** What an unverified call site is called once its own wording had to be set aside. */
+const UNNAMED_SITE = '(site not named)';
 
 export interface ClaimGround {
   /** Call sites the mechanical matcher found in the repository. */
   sites: UsageSite[];
   /** Release notes, commit subjects and diff text the agent was given, joined. */
   evidence: string;
+  /** The address this run resolved the release notes from, which is the agent's own fact. */
+  notesSource: string;
+}
+
+/**
+ * A citation is an address, not a sentence. `source` is the one field nothing checked: the model
+ * wrote it freely, up to 300 characters, and it was printed under a claim and turned into a link on
+ * a public page, so a package author who steered the model could put their own words there and have
+ * them read as this agent's.
+ *
+ * A single http(s) token with no whitespace in it, so a sentence cannot ride in whatever it says.
+ */
+const ONE_URL = /^https?:\/\/\S+$/i;
+/** The addresses the material itself carries, each as a whole token rather than as a substring. */
+const URLS_IN_TEXT = /https?:\/\/[^\s<>"')\]]+/gi;
+
+/**
+ * What a claim's source says when the run had no address to offer: no release notes page existed,
+ * so the quote came from the commit subjects and changed file names the agent was given. Naming
+ * that is honest, where printing a sentinel meant for a prompt would read as a broken address.
+ */
+const READ_MATERIAL = 'the commit subjects and changed files this run read';
+
+/**
+ * Answers with the citation to publish. The run's own resolved address is the agent's fact and is
+ * always allowed; anything else has to be an address the material itself carries, matched as a
+ * whole token. A citation that is neither is REPLACED rather than dropping the claim.
+ *
+ * Whole-token matching is the point of `URLS_IN_TEXT`. A plain substring test would accept
+ * `https://evil.example` on the strength of a trusted address that merely carried it as a query
+ * value, and the reader would be handed the attacker's host under a claim about their own code.
+ *
+ * Replacing rather than dropping is the rest of the design. A drop would hand the package author a
+ * way to delete the one claim carrying the warning a reader needed, by writing a citation they
+ * knew would be refused; the reader would see a brief that looked complete. Replacing costs the
+ * attacker nothing they had, and costs the reader nothing they needed.
+ */
+function cite(source: string, ground: ClaimGround): string {
+  const cited = source.trim();
+  const ours = ground.notesSource.trim();
+  if (cited === ours) return cited;
+
+  if (ONE_URL.test(cited)) {
+    for (const found of ground.evidence.matchAll(URLS_IN_TEXT)) {
+      if (found[0] === cited) return cited;
+    }
+  }
+  return ONE_URL.test(ours) ? ours : READ_MATERIAL;
 }
 
 export interface VerifiedClaims {
@@ -186,6 +241,10 @@ export interface VerifiedClaims {
  * The model may only report what the evidence already says. A quote that is not in the material it
  * was given is dropped outright rather than labelled, because an invented quotation reads as proof
  * and is the one failure a reader cannot catch by eye.
+ *
+ * A missing quote is the ONLY thing that drops a claim, deliberately. Every other correction here
+ * rewrites a field and keeps the claim, so nothing a package author writes can decide which of
+ * their release's breakages a reader gets to see.
  */
 export function verifyClaims(claims: Claim[], ground: ClaimGround): VerifiedClaims {
   const haystack = normalize(ground.evidence);
@@ -204,7 +263,19 @@ export function verifyClaims(claims: Claim[], ground: ClaimGround): VerifiedClai
       dropped += 1;
       continue;
     }
-    kept.push({ ...claim, verified: known.has(`${claim.path}:${claim.line}:${claim.symbol}`) });
+    const verified = known.has(`${claim.path}:${claim.line}:${claim.symbol}`);
+    // A verified path and symbol are the matcher's own facts handed to the model and given back,
+    // so they stand as they are. An unverified pair is the model's own words about the reader's
+    // code, and those are the ones that can be steered, so a pair that speaks in this agent's name
+    // loses its wording and keeps its claim.
+    const named = verified ? null : overstepIn(`${claim.path}\n${claim.symbol}`);
+    kept.push({
+      ...claim,
+      path: named ? UNNAMED_SITE : claim.path,
+      symbol: named ? UNNAMED_SITE : claim.symbol,
+      source: cite(claim.source, ground),
+      verified,
+    });
   }
 
   return { claims: kept, dropped };

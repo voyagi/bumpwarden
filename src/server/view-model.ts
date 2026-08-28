@@ -193,18 +193,35 @@ export function actionLabel(action: ActionRecord): string {
  */
 const LINKABLE = new Set(['http:', 'https:']);
 
+/** Tab, line feed and carriage return: a parser drops these from an address wherever they sit. */
+const DROPPED_FROM_URLS = /[\t\n\r]/g;
+
+/**
+ * Somewhere for a path to be resolved against. The host never has to exist, because the only
+ * question put to the result is whether resolving carried the address off this base, and
+ * `.invalid` is reserved so nothing anywhere can ever answer for it.
+ */
+const PATH_BASE = 'https://bumpwarden.invalid';
+
 export function safeHref(value: string | null | undefined): string | null {
   if (!value) return null;
-  // A single leading slash is a path this repository built. `//host` is a protocol-relative url,
-  // and `/\host` is the same thing spelled the way a browser normalises rather than the way a
-  // reader parses: both are somebody else's host wearing one of our paths.
-  if (value.startsWith('/')) {
-    return value[1] === '/' || value[1] === '\\' ? null : value;
-  }
 
   try {
+    // A single leading slash is a path this repository built. `//host` is a protocol-relative url,
+    // and `/\host` is the same thing spelled the way a browser normalises rather than the way a
+    // reader parses: both are somebody else's host wearing one of our paths, the base's own host
+    // included, which is the one authority resolving has no objection to. A parser drops a tab or a
+    // newline before it reads any of it, so the second character is read after that drop, and
+    // resolving then answers for every other spelling of an authority.
+    if (value.startsWith('/')) {
+      const asParsed = value.replace(DROPPED_FROM_URLS, '');
+      if (asParsed.startsWith('//') || asParsed.startsWith('/\\')) return null;
+      return new URL(value, PATH_BASE).origin === PATH_BASE ? value : null;
+    }
+
     return LINKABLE.has(new URL(value).protocol) ? value : null;
   } catch {
+    // An address no parser accepts is not one this page can hand a reader to click.
     return null;
   }
 }

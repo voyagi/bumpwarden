@@ -38,8 +38,19 @@ export interface RunClaim {
   expiresAt: string;
 }
 
-/** The one lease. A run reads and writes GitHub and Firestore, so two of anything overlap. */
+// A lease names what it covers, because the caller who takes it is only authorised for that much.
+// "Run now" is public and authorised for one demo project, so a single global lease let an
+// anonymous press hold the whole watch list and turn the scheduler away from repositories that
+// visitor was never allowed to touch.
+
+/** A run over the whole watch list, against another run of its own kind. */
 export const RUN_CLAIM_KEY = 'run';
+/** The one slot every project-scoped run shares, whichever project it covers. */
+export const SCOPED_RUN_CLAIM_KEY = 'run:scoped';
+/** One repository, taken by whichever run reaches it, so no two runs read and write it at once. */
+export function repositoryClaimKey(repositoryId: string): string {
+  return `run:${repositoryId}`;
+}
 
 /**
  * A held claim only stops counting once its expiry has passed, and an expiry that does not parse

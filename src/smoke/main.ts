@@ -2,6 +2,7 @@ import { createAdkBriefEngine } from '../agent/adk-engine.js';
 import type { BriefRequest } from '../agent/prompt.js';
 import { writeBrief } from '../agent/write-brief.js';
 import { RUBRIC_VERSION } from '../core/rubric.js';
+import { safeBlockForTerminal, safeForTerminal } from '../io/terminal.js';
 
 /**
  * One real call to Gemini, over material that is checked into this file rather than fetched.
@@ -74,20 +75,26 @@ async function main(): Promise<void> {
   console.log(`dropped    ${brief.droppedClaims} claim(s) the release notes did not support`);
 
   if (brief.status !== 'ready' || !brief.content) {
-    console.error(`\nno brief: ${brief.reason ?? 'no reason recorded'}`);
+    console.error(`\nno brief: ${safeForTerminal(brief.reason ?? 'no reason recorded')}`);
     process.exitCode = 1;
     return;
   }
 
   const content = brief.content;
-  console.log(`\n${content.headline}\n${content.whatChanged}`);
+  // `whatChanged` is the one field written to carry paragraphs and lists, and this is the tool
+  // whose job is reading a brief, so its line breaks are kept and every line is prefixed instead.
+  console.log(`\n${safeForTerminal(content.headline)}`);
+  console.log(safeBlockForTerminal(content.whatChanged));
   console.log(`\nbreaks here (${content.breaksHere.length}):`);
   for (const claim of content.breaksHere) {
     const mark = claim.verified ? 'verified' : 'unverified';
-    console.log(`  ${claim.path}:${claim.line} ${claim.symbol} [${mark}]`);
-    console.log(`    "${claim.quote}"`);
+    console.log(
+      `  ${safeForTerminal(claim.path)}:${claim.line} ${safeForTerminal(claim.symbol)} [${mark}]`,
+    );
+    console.log(`    "${safeForTerminal(claim.quote)}"`);
   }
-  console.log(`\nmigration: ${content.migrationSteps.join(' ')}`);
+  console.log('\nmigration:');
+  console.log(safeBlockForTerminal(content.migrationSteps.join('\n')));
   console.log(`confidence: ${content.confidence}`);
 }
 

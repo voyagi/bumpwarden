@@ -22,6 +22,35 @@ describe('what may become a link', () => {
   });
 
   /**
+   * A parser drops tab, line feed and carriage return from an address wherever they sit, so the
+   * second slash of a protocol-relative url can be hidden from a reader while a browser still
+   * follows it. The host a path is resolved against is somebody else's host too, and spelling it
+   * out is the one address resolving alone has no objection to.
+   */
+  it('refuses a host hidden by a dropped character, or spelled as the base itself', () => {
+    for (const attempt of [
+      '/\t/evil.example.net/projects',
+      '/\n/evil.example.net/projects',
+      '/\r/evil.example.net/projects',
+      '/\r\n/evil.example.net',
+      '/\t\\evil.example.net/projects',
+      '//bumpwarden.invalid/x',
+      '/\\bumpwarden.invalid/x',
+      '//BUMPWARDEN.INVALID/x',
+      '//user@bumpwarden.invalid/x',
+      '//bumpwarden.invalid:443/x',
+      '//bumpwarden.invalid',
+    ]) {
+      expect(safeHref(attempt), JSON.stringify(attempt)).toBeNull();
+    }
+  });
+
+  it('keeps a path carrying a character no parser drops', () => {
+    // A vertical tab is not one of the three, so this address still reads as this site's path.
+    expect(safeHref('/projects/one\u000btwo')).toBe('/projects/one\u000btwo');
+  });
+
+  /**
    * The claim source is written by the model, from release notes whoever published the package
    * wrote. A scheme that runs code on a click is the one thing that must not survive the trip.
    */
