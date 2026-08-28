@@ -50,7 +50,7 @@ constants the scorer adds up, so the page cannot drift from the verdict.
 | Band  | Rule          | Action                                                                                                                                                    |
 | ----- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | green | `GRN-PR-1`    | Open a pull request with the bump and the brief. If Dependabot or Renovate already opened one for the same bump, comment there instead of duplicating it. |
-| amber | `AMB-ISSUE-1` | Open an issue with the brief and a migration checklist, labelled `bumpwarden:review`. No pull request.                                                    |
+| amber | `AMB-ISSUE-1` | Open an issue with the brief and the migration steps the release notes asked for, labelled `bumpwarden:review`. No pull request.                          |
 | red   | `RED-HOLD-1`  | Open a hold issue with a migration plan, labelled `bumpwarden:hold`. Never a pull request.                                                                |
 
 There is no merge action, and no setting adds one. The union of actions the code can take has no
