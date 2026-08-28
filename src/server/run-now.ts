@@ -48,12 +48,19 @@ function activeRun(runs: RunRecord[], repositoryId: string): RunRecord | undefin
   );
 }
 
+/**
+ * A run that stepped over this repository because another run held it never read it, so it cannot
+ * date the project. A repository that was read and failed still counts: something looked, and the
+ * failure is the run's own to report.
+ */
 function lastFinished(runs: RunRecord[], repositoryId: string): RunRecord | undefined {
   return runs.find(
     (run) =>
       run.finishedAt !== null &&
       (run.scope === repositoryId ||
-        run.repositories.some((result) => result.repositoryId === repositoryId)),
+        run.repositories.some(
+          (result) => result.repositoryId === repositoryId && result.skipped !== true,
+        )),
   );
 }
 
