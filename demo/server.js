@@ -39,8 +39,13 @@ app.del('/notes/:slug/cookie', (req, res) => {
 });
 
 app.post('/webhook', (req, res) => {
-  if (!req.body || !req.body.tag) return res.status(400).json({ error: 'tag is required' });
-  res.status(202).json({ accepted: req.body.tag });
+  // A truthy check alone accepts an object or a number and hands it straight back, so the reply
+  // says "accepted" about something this endpoint never understood.
+  const tag = req.body && req.body.tag;
+  if (typeof tag !== 'string' || tag.trim() === '') {
+    return res.status(400).json({ error: 'tag is required, as a non-empty string' });
+  }
+  res.status(202).json({ accepted: tag });
 });
 
 if (require.main === module) {
