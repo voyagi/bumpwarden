@@ -484,12 +484,22 @@ describe('what the crawlers read', () => {
   it('never serves a dotfile out of the asset folder, even one that is really there', async () => {
     // Serving a folder is not a decision to publish everything anyone drops into it. The file is
     // created for real, because a 404 on a path that never existed proves nothing about the guard.
+    // The spellings are the point: router and file resolver each decode the path, so an escaped
+    // leading dot is the same file asked for in a way that reads as an ordinary word in the URL.
     const marker = 'public/fonts/.test-marker';
+    const spellings = [
+      '/fonts/.test-marker',
+      '/fonts/%2Etest-marker',
+      '/fonts/%2etest-marker',
+      '/fonts/%%32%45test-marker',
+    ];
     await writeFile(marker, 'local only', 'utf8');
     try {
-      const hidden = await app(store).request('http://local/fonts/.test-marker');
+      for (const spelling of spellings) {
+        const hidden = await app(store).request(`http://local${spelling}`);
+        expect(hidden.status, spelling).toBe(404);
+      }
       const plain = await app(store).request('http://local/fonts/mona-sans-latin.woff2');
-      expect(hidden.status).toBe(404);
       expect(plain.status).toBe(200);
     } finally {
       await rm(marker, { force: true });

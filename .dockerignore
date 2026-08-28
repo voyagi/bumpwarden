@@ -14,3 +14,6 @@ firebase.json
 *.md
 **/*.test.ts
 **/*.test.tsx
+# Nothing hidden belongs in the served static root. The app refuses to serve a dotfile there,
+# and this keeps one out of the image in the first place rather than relying on that alone.
+public/**/.*

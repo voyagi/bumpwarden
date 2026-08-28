@@ -41,12 +41,28 @@ const ASSET_CACHE = 'public, max-age=604800';
 const CODE_CACHE = 'public, max-age=60';
 
 /**
+ * The name a guard reads has to be the name the file resolver opens. hono routes on a path it has
+ * already put through decodeURI, and serveStatic decodes that one more time before the read, so
+ * `%2Ename` reads as an ordinary word in the URL and lands on disk as `.name`. Decoding once here
+ * is what puts the two on the same value; a sequence that will not decode at all is refused rather
+ * than half-read into a name nobody asked for.
+ */
+function isHidden(path: string): boolean {
+  let name: string;
+  try {
+    name = decodeURIComponent(path);
+  } catch {
+    return true;
+  }
+  return name.split('/').some((part) => part.startsWith('.'));
+}
+
+/**
  * A dotfile under a static root is a file nobody chose to publish: an editor's leavings, a local
  * marker, a stray .env. Serving the folder must never mean serving those as well.
  */
 async function refuseDotfiles(c: Context, next: Next): Promise<Response | undefined> {
-  const hidden = new URL(c.req.url).pathname.split('/').some((part) => part.startsWith('.'));
-  if (hidden) return c.notFound();
+  if (isHidden(c.req.path)) return c.notFound();
   await next();
   return undefined;
 }
@@ -64,11 +80,15 @@ function caching(value: string) {
 }
 
 function mountAssets(app: Hono): void {
-  app.use('/fonts/*', refuseDotfiles);
-  app.use('/fonts/*', caching(ASSET_CACHE), serveStatic({ root: './public' }));
-  app.use('/bumpwarden.css', caching(CODE_CACHE), serveStatic({ root: './public' }));
-  app.use('/run-now.js', caching(CODE_CACHE), serveStatic({ root: './public' }));
-  app.use('/favicon.svg', caching(ASSET_CACHE), serveStatic({ root: './public' }));
+  app.use('/fonts/*', refuseDotfiles, caching(ASSET_CACHE), serveStatic({ root: './public' }));
+  app.use(
+    '/bumpwarden.css',
+    refuseDotfiles,
+    caching(CODE_CACHE),
+    serveStatic({ root: './public' }),
+  );
+  app.use('/run-now.js', refuseDotfiles, caching(CODE_CACHE), serveStatic({ root: './public' }));
+  app.use('/favicon.svg', refuseDotfiles, caching(ASSET_CACHE), serveStatic({ root: './public' }));
 }
 
 /**
