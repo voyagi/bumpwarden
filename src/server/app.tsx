@@ -131,7 +131,8 @@ export function createApp(options: AppOptions = {}): Hono {
     }),
   );
 
-  instance.get('/healthz', (c) => c.json({ ok: true, service: SERVICE_NAME }));
+  // Not /healthz: Google's frontend reserves that path on Cloud Run and answers it before the app.
+  instance.get('/health', (c) => c.json({ ok: true, service: SERVICE_NAME }));
 
   instance.post('/run', async (c) => {
     const decision = await authorizeRun(c.req.header('authorization'), runAuth);

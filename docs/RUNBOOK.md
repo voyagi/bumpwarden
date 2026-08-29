@@ -70,7 +70,7 @@ verdict like this:
 
 - **A route answers but the marker is missing.** A stale or wrong revision is serving. Compare the
   revision in the Cloud Run console with the one you meant to deploy, then section 1.
-- **`/healthz` answers and an HTML route does not.** The app boots but a page throws. The log has
+- **`/health` answers and an HTML route does not.** The app boots but a page throws. The log has
   the stack. Roll back (section 1), then fix forward.
 - **Nothing answers.** Cloud Run is down or the service was deleted. `gcloud run services
 describe bumpwarden --region europe-west1` says which. A deleted service is re-created by the
@@ -136,5 +136,5 @@ Two credentials exist, both in Secret Manager, both read at boot only.
 - **The scheduler's identity** is a service account with no key to rotate. Its OIDC token is
   minted per call and verified in the app against the service's own URL.
 
-After any rotation, run the README's step 9: `/healthz`, the `401` on a bare `POST /run`, then one
+After any rotation, run the README's step 9: `/health`, the `401` on a bare `POST /run`, then one
 scheduled run, and read `run finished` in the log.
