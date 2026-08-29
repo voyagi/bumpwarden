@@ -3,7 +3,7 @@ import { SERVICE_NAME, app } from './app.js';
 
 describe('server', () => {
   it('answers the health probe with the service name', async () => {
-    const res = await app.request('/healthz');
+    const res = await app.request('/health');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, service: SERVICE_NAME });
   });
@@ -75,7 +75,7 @@ describe('what every response carries', () => {
   });
 
   it('carries them on the api answers and the assets too, not only on the pages', async () => {
-    for (const path of ['/healthz', '/sitemap.xml', '/robots.txt', '/no-such-page']) {
+    for (const path of ['/health', '/sitemap.xml', '/robots.txt', '/no-such-page']) {
       const headers = (await app.request(path)).headers;
       expect(headers.get('content-security-policy'), path).toContain("default-src 'none'");
       expect(headers.get('x-content-type-options'), path).toBe('nosniff');
