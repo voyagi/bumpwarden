@@ -15,6 +15,9 @@ import {
   type BriefRequest,
 } from './prompt.js';
 
+/**
+ * Interface for generating briefs using an AI model.
+ */
 export interface BriefEngine {
   readonly model: string;
   /** One attempt. Returns the model's final text; throws only on a transport or quota failure. */
@@ -45,11 +48,17 @@ export const MAX_RETRY_WAIT_MS = 30_000;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Cache for storing and retrieving brief records to avoid regenerating them.
+ */
 export interface BriefCache {
   get(cacheKey: string): Promise<BriefRecord | null>;
   put(record: BriefRecord): Promise<void>;
 }
 
+/**
+ * Options for writing a brief, including the engine, cache, and budget settings.
+ */
 export interface WriteBriefOptions {
   engine: BriefEngine;
   rubricVersion: string;

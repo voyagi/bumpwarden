@@ -1,7 +1,13 @@
 import semver from 'semver';
 
+/**
+ * The type of lockfile found in a repository.
+ */
 export type LockfileKind = 'npm' | 'pnpm' | 'yarn' | 'none';
 
+/**
+ * A dependency with its installed version resolved from the lockfile or manifest range.
+ */
 export interface InstalledDependency {
   name: string;
   /** The exact version from the lockfile, or the range's floor when no lockfile could be read. */
@@ -10,11 +16,17 @@ export interface InstalledDependency {
   range: string;
 }
 
+/**
+ * Key information extracted from a package.json manifest.
+ */
 export interface ParsedManifest {
   engines: string | null;
   dependencies: Array<{ name: string; range: string }>;
 }
 
+/**
+ * The lockfiles bumpwarden knows how to read, in order of precedence.
+ */
 export const LOCKFILES: Array<{ path: string; kind: LockfileKind }> = [
   { path: 'package-lock.json', kind: 'npm' },
   { path: 'pnpm-lock.yaml', kind: 'pnpm' },
@@ -32,6 +44,9 @@ interface NpmLockJson {
   dependencies?: Record<string, { version?: string }>;
 }
 
+/**
+ * Parses a package.json file and extracts engine requirements and dependency information.
+ */
 export function parseManifest(text: string): ParsedManifest | null {
   let json: ManifestJson;
   try {
@@ -60,6 +75,9 @@ export function rangeFloor(range: string): string | null {
   }
 }
 
+/**
+ * Parses an npm lockfile and extracts the installed version of each package.
+ */
 export function parseNpmLock(text: string): Map<string, string> {
   const installed = new Map<string, string>();
   let json: NpmLockJson;
@@ -89,6 +107,10 @@ export function parseNpmLock(text: string): Map<string, string> {
   return installed;
 }
 
+/**
+ * Resolves the installed version of each dependency in the manifest using the lockfile.
+ * Falls back to the range floor if a lockfile entry is not found.
+ */
 export function resolveInstalled(
   manifest: ParsedManifest,
   locked: Map<string, string>,

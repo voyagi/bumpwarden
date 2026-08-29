@@ -15,6 +15,9 @@ const WINDOW_MS = 60_000;
  */
 const EDGE_MS = 250;
 
+/**
+ * Configuration options for creating a request pacer.
+ */
 export interface RequestPacerOptions {
   /** Requests allowed inside one window. */
   limit: number;
@@ -24,6 +27,7 @@ export interface RequestPacerOptions {
 }
 
 /**
+ * A reservation for request capacity in the rate limit window.
  * Room in the window that one caller has cleared and not yet used. Several briefs are in flight at
  * once, and between clearing and sending nothing has gone out yet, so without this two callers
  * could both be promised the last slot of the minute.
@@ -37,6 +41,9 @@ export interface Reservation {
   release(): void;
 }
 
+/**
+ * Manages request pacing to stay within rate limits.
+ */
 export interface RequestPacer {
   /** Waits until `cost` more requests fit in the window, and holds that room for the caller. */
   clear(cost: number): Promise<Reservation>;
@@ -52,6 +59,9 @@ export interface RequestPacer {
   waited(): number;
 }
 
+/**
+ * Creates a new request pacer that manages rate limiting across multiple concurrent callers.
+ */
 export function createRequestPacer(options: RequestPacerOptions): RequestPacer {
   const windowMs = options.windowMs ?? WINDOW_MS;
   const now = options.now ?? Date.now;

@@ -13,10 +13,17 @@ export interface BumpIdentity {
 const MARKER_OPEN = '<!-- bumpwarden:key=';
 const MARKER_CLOSE = ' -->';
 
+/**
+ * Combines repository owner and name into a single identifier in the format `owner/repo`.
+ */
 export function repositoryId(owner: string, repo: string): string {
   return `${owner}/${repo}`;
 }
 
+/**
+ * Constructs a unique bump key from repository owner, name, dependency and candidate version.
+ * The key is used to identify a bump across runs so subsequent runs update existing issues.
+ */
 export function bumpKey(identity: BumpIdentity): string {
   const { owner, repo, dependency, candidateVersion } = identity;
   return `${owner}/${repo}#${dependency}@${candidateVersion}`;
@@ -36,6 +43,10 @@ export function marker(key: string): string {
   return `${MARKER_OPEN}${key}${MARKER_CLOSE}`;
 }
 
+/**
+ * Extracts the bump key from an issue or pull request body by finding the marker comment.
+ * Returns null if the marker is not found or is malformed.
+ */
 export function keyFromBody(body: string): string | null {
   const start = body.indexOf(MARKER_OPEN);
   if (start === -1) return null;
@@ -48,6 +59,9 @@ export function keyFromBody(body: string): string | null {
   return found.length > 0 ? found : null;
 }
 
+/**
+ * Checks whether an issue or pull request body contains the specified bump key in its marker.
+ */
 export function bodyCarriesKey(body: string, key: string): boolean {
   return keyFromBody(body) === key;
 }

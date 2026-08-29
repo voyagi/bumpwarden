@@ -1,3 +1,6 @@
+/**
+ * The result of editing a package manifest to bump a dependency version.
+ */
 export interface ManifestEdit {
   text: string;
   from: string;

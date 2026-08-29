@@ -7,10 +7,16 @@ import type { RunRecord, Trigger } from '../core/records.js';
  */
 export const RUN_IN_PROGRESS = 'RunInProgressError';
 
+/**
+ * Checks whether an error indicates that a run is already in progress.
+ */
 export function isRunInProgress(error: unknown): boolean {
   return error instanceof Error && error.name === RUN_IN_PROGRESS;
 }
 
+/**
+ * Options for starting a new run.
+ */
 export interface StartRunOptions {
   trigger: Trigger;
   /** A manual run may be scoped to one project; a scheduled run covers the whole watch list. */

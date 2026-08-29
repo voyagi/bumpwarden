@@ -32,6 +32,9 @@ export const MODEL_LOG: Record<ModelProbe['status'], string> = {
   unreachable: 'model not checked',
 };
 
+/**
+ * Options for probing a model's availability and configuration.
+ */
 export interface ModelProbeOptions {
   apiKey: string;
   model?: string;

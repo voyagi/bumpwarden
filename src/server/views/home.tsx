@@ -19,6 +19,9 @@ export interface HomeProps {
   totals: BandCounts;
 }
 
+/**
+ * Generates the headline text for the home page based on project count and bump status.
+ */
 export function homeHeadline(projects: number, counts: BandCounts): string {
   const watched = `${projects} ${projects === 1 ? 'repository' : 'repositories'} watched.`;
   if (counts.red === 0) {

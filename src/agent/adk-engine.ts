@@ -35,6 +35,9 @@ export const MAX_OUTPUT_TOKENS = 8192;
  */
 export const REQUESTS_PER_BRIEF = 2;
 
+/**
+ * Configuration options for creating a brief engine using the Google ADK.
+ */
 export interface AdkBriefEngineOptions {
   apiKey: string;
   model?: string;
@@ -42,6 +45,9 @@ export interface AdkBriefEngineOptions {
   pacer?: RequestPacer;
 }
 
+/**
+ * A brief engine that includes request pacing information.
+ */
 export interface PacedBriefEngine extends BriefEngine {
   readonly pacer: RequestPacer;
 }
@@ -115,11 +121,17 @@ function refusalOf(event: Event): Refusal | null {
   };
 }
 
+/**
+ * Extracts the retry delay in milliseconds from an API error message, if present.
+ */
 export function retryDelayFrom(message: string): number | null {
   const seconds = Number(RETRY_HINT.exec(message)?.[1]);
   return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds * 1000) : null;
 }
 
+/**
+ * Extracts the rate limit from an API error message, if present.
+ */
 export function limitFrom(message: string): number | null {
   const limit = Number(LIMIT_HINT.exec(message)?.[1]);
   return Number.isInteger(limit) && limit > 0 ? limit : null;

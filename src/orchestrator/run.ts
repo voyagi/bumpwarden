@@ -51,6 +51,9 @@ import { collectSourceFiles } from './source-files.js';
  */
 const LANDED = new Set<ActionOutcome>(['opened', 'updated', 'commented']);
 
+/**
+ * Options for configuring a bumpwarden run.
+ */
 export interface RunOptions {
   trigger: Trigger;
   /** A manual run may be scoped to one project; a scheduled run covers the whole watch list. */
@@ -61,6 +64,7 @@ export interface RunOptions {
 }
 
 /**
+ * Resolves the brief and action budgets from options, falling back to published defaults.
  * What a run will actually spend, resolved in one place. The Policy page publishes these numbers,
  * so the defaults are the published constants rather than literals sitting next to a `??`, and
  * `run.test.ts` pins the two together.
@@ -84,6 +88,9 @@ export interface RunAllowance {
   actions: number;
 }
 
+/**
+ * Creates the initial run allowance from the configured budgets.
+ */
 export function allowanceFor(options: RunOptions): RunAllowance {
   const budgets = resolveBudgets(options);
   return { briefs: budgets.brief, actions: budgets.action };

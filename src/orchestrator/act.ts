@@ -103,6 +103,10 @@ function mentions(haystack: string, needle: string, edge: string): boolean {
  * match written in an unusual way, which costs a duplicate pull request somebody can see, rather
  * than loose enough to comment on a neighbour's, which costs a brief filed under the wrong package.
  */
+/**
+ * Finds an existing pull request from Dependabot or Renovate for the given dependency.
+ * Returns information about the PR if found, including whether it matches the candidate version.
+ */
 export function findBotPullRequest(
   pulls: IssueLike[],
   dependency: string,

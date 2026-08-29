@@ -25,6 +25,9 @@ const CAP = {
   claimSource: 300,
 } as const;
 
+/**
+ * Schema for a claim that points to a specific usage site in the repository.
+ */
 export const claimSchema = z.strictObject({
   path: z.string().min(1).max(CAP.claimPath),
   line: z.number().int().min(1).max(1_000_000),
@@ -55,6 +58,9 @@ export const BRIEF_MAX_CHARS =
   CAP.items * (CAP.claimPath + CAP.claimSymbol + CAP.claimQuote + CAP.claimSource) +
   400;
 
+/**
+ * Strict schema for validating the model's brief output.
+ */
 export const briefPayloadSchema = z.strictObject(briefShape);
 
 /**
@@ -64,7 +70,14 @@ export const briefPayloadSchema = z.strictObject(briefShape);
  */
 export const briefModelSchema = z.object(briefShape);
 
+/**
+ * The validated output from the model.
+ */
 export type BriefPayload = z.infer<typeof briefPayloadSchema>;
+
+/**
+ * A single claim about a usage site in the repository.
+ */
 export type Claim = z.infer<typeof claimSchema>;
 
 export interface VerifiedClaim extends Claim {
@@ -76,6 +89,9 @@ export interface VerifiedClaim extends Claim {
   verified: boolean;
 }
 
+/**
+ * The substantive content of a brief, excluding metadata.
+ */
 export interface BriefContent {
   headline: string;
   whatChanged: string;
@@ -85,8 +101,14 @@ export interface BriefContent {
   confidence: 'high' | 'medium' | 'low';
 }
 
+/**
+ * Status of a brief: either ready with content, or unavailable with a reason.
+ */
 export type BriefStatus = 'ready' | 'unavailable';
 
+/**
+ * A complete brief record including content, metadata, and cache information.
+ */
 export interface BriefRecord {
   cacheKey: string;
   bumpKey: string;
@@ -103,6 +125,9 @@ export interface BriefRecord {
   content: BriefContent | null;
 }
 
+/**
+ * Constructs a cache key for a brief that includes the bump key, rubric version, and schema version.
+ */
 export function briefCacheKey(bumpKey: string, rubricVersion: string): string {
   return `${bumpKey}|rubric=${rubricVersion}|schema=${BRIEF_SCHEMA_VERSION}`;
 }
@@ -163,6 +188,10 @@ function overstepIn(text: string): string | null {
   return null;
 }
 
+/**
+ * Checks whether the brief contains language that inappropriately claims authority.
+ * Returns a description of the problem if found, or null if the brief is acceptable.
+ */
 export function claimsAuthority(content: BriefPayload): string | null {
   return overstepIn(
     [
@@ -177,6 +206,9 @@ export function claimsAuthority(content: BriefPayload): string | null {
 /** What an unverified call site is called once its own wording had to be set aside. */
 const UNNAMED_SITE = '(site not named)';
 
+/**
+ * Evidence and facts used to verify claims made by the model.
+ */
 export interface ClaimGround {
   /** Call sites the mechanical matcher found in the repository. */
   sites: UsageSite[];
@@ -232,6 +264,9 @@ function cite(source: string, ground: ClaimGround): string {
   return ONE_URL.test(ours) ? ours : READ_MATERIAL;
 }
 
+/**
+ * Result of verifying claims, containing the verified claims and count of dropped claims.
+ */
 export interface VerifiedClaims {
   claims: VerifiedClaim[];
   dropped: number;
@@ -281,6 +316,9 @@ export function verifyClaims(claims: Claim[], ground: ClaimGround): VerifiedClai
   return { claims: kept, dropped };
 }
 
+/**
+ * Input data for creating a brief record that indicates the brief is unavailable.
+ */
 export interface UnavailableBriefInput {
   bumpKey: string;
   cacheKey: string;
@@ -292,6 +330,9 @@ export interface UnavailableBriefInput {
   reason: string;
 }
 
+/**
+ * Creates a brief record that indicates the brief could not be generated.
+ */
 export function unavailableBrief(input: UnavailableBriefInput): BriefRecord {
   return {
     cacheKey: input.cacheKey,

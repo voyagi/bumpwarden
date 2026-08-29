@@ -1,9 +1,21 @@
+/**
+ * Risk band classification for a bump: green (low risk), amber (medium risk), or red (high risk).
+ */
 export type Band = 'green' | 'amber' | 'red';
 
+/**
+ * Security advisory severity levels.
+ */
 export type AdvisorySeverity = 'critical' | 'high' | 'moderate' | 'low';
 
+/**
+ * Result of matching changed symbols in a release against repository usage.
+ */
 export type UsageMatch = 'changed-symbol' | 'package-only' | 'unused';
 
+/**
+ * A specific location in the codebase where a dependency symbol is used.
+ */
 export interface UsageSite {
   path: string;
   line: number;
@@ -26,6 +38,9 @@ export interface ReleaseEvidence {
   changedFiles?: string[];
 }
 
+/**
+ * All information about a candidate dependency bump, including versions, advisories, and usage analysis.
+ */
 export interface CandidateBump {
   dependency: string;
   currentVersion: string;
@@ -42,12 +57,17 @@ export interface CandidateBump {
   release: ReleaseEvidence;
 }
 
-/** A source the run could not read. Recorded rather than guessed, and shown next to the verdict. */
+/**
+ * A source the run could not read. Recorded rather than guessed, and shown next to the verdict.
+ */
 export interface MissingSource {
   what: string;
   why: string;
 }
 
+/**
+ * A scored risk factor contributing to the overall risk assessment of a bump.
+ */
 export interface ScoredFactor {
   id: string;
   label: string;
@@ -57,6 +77,9 @@ export interface ScoredFactor {
   locks: string;
 }
 
+/**
+ * The complete risk score for a bump, including total points, band classification, and contributing factors.
+ */
 export interface Score {
   total: number;
   band: Band;

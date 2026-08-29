@@ -6,12 +6,18 @@ import type { Band, Score } from './types.js';
 /** GitHub rejects a body over 65536 characters, and a run must never fail on a long changelog. */
 export const MAX_BODY = 60_000;
 
+/**
+ * The word used to describe each band in verdicts shown to users.
+ */
 export const VERDICT_WORD: Record<Band, string> = {
   green: 'Clear',
   amber: 'Caution',
   red: 'Held',
 };
 
+/**
+ * Core information about a bump used throughout the system for titles, keys, and identifiers.
+ */
 export interface BumpSummary {
   key: string;
   repositoryId: string;
@@ -20,6 +26,9 @@ export interface BumpSummary {
   candidateVersion: string;
 }
 
+/**
+ * All inputs needed to construct the body of an issue or pull request that bumpwarden opens.
+ */
 export interface BodyInput {
   bump: BumpSummary;
   score: Score;
@@ -40,15 +49,24 @@ export function bumpTitle(bump: BumpSummary): string {
   return `${bump.dependency} ${bump.currentVersion} to ${bump.candidateVersion}`;
 }
 
+/**
+ * Creates a title for an issue, including the bump details, verdict, and score.
+ */
 export function issueTitle(bump: BumpSummary, score: Score): string {
   const verdict = VERDICT_WORD[score.band].toLowerCase();
   return `${bumpTitle(bump)}: ${verdict}, scored ${score.total}`;
 }
 
+/**
+ * Creates a title for a pull request carrying the dependency bump.
+ */
 export function pullRequestTitle(bump: BumpSummary): string {
   return `Bump ${bump.dependency} from ${bump.currentVersion} to ${bump.candidateVersion}`;
 }
 
+/**
+ * Generates the Git branch name for the pull request that carries this bump.
+ */
 export function branchName(bump: BumpSummary): string {
   const slug = `${bump.dependency}-${bump.candidateVersion}`.replace(/[^A-Za-z0-9._-]+/g, '-');
   return `bumpwarden/${slug}`;

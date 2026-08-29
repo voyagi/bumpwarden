@@ -15,6 +15,9 @@ export type PolicyRuleId = 'GRN-PR-1' | 'AMB-ISSUE-1' | 'RED-HOLD-1';
  */
 export type ActionKind = 'pull-request' | 'issue' | 'hold-issue' | 'comment-on-bot-pull-request';
 
+/**
+ * The root label applied to all issues and pull requests created by bumpwarden.
+ */
 export const LABEL_ROOT = 'bumpwarden';
 
 /**
@@ -47,6 +50,9 @@ export const RUN_TIME_BUDGET_SECONDS = 600;
 export const LOCKFILE_POLICY =
   'The lockfile is not regenerated here, because bumpwarden does not run your package manager.';
 
+/**
+ * A policy rule that determines what action to take for a bump in a given risk band.
+ */
 export interface PolicyRule {
   id: PolicyRuleId;
   band: Band;
@@ -88,6 +94,9 @@ export const POLICY_RULES: Record<Band, PolicyRule> = {
   },
 };
 
+/**
+ * Information about a pull request opened by another dependency update bot.
+ */
 export interface BotPullRequest {
   number: number;
   url: string;
@@ -96,10 +105,16 @@ export interface BotPullRequest {
   matchesCandidate: boolean;
 }
 
+/**
+ * Context information used when deciding what action to take for a bump.
+ */
 export interface PolicyContext {
   botPullRequest: BotPullRequest | null;
 }
 
+/**
+ * The policy's decision on what action to take for a bump.
+ */
 export interface PolicyDecision {
   ruleId: PolicyRuleId;
   kind: ActionKind;
@@ -109,6 +124,9 @@ export interface PolicyDecision {
   target: BotPullRequest | null;
 }
 
+/**
+ * Returns the policy rule for the given risk band.
+ */
 export function ruleFor(band: Band): PolicyRule {
   return POLICY_RULES[band];
 }

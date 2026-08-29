@@ -1,5 +1,8 @@
 import type { Band, UsageSite } from '../core/types.js';
 
+/**
+ * All information needed to request a brief about a dependency bump from the model.
+ */
 export interface BriefRequest {
   bumpKey: string;
   repositoryId: string;
@@ -15,6 +18,9 @@ export interface BriefRequest {
   changedFiles: string[];
 }
 
+/**
+ * Limits on how much material from each source to include in a brief request to the model.
+ */
 export interface BriefBudget {
   maxNoteChars: number;
   maxCommitSubjects: number;
@@ -35,6 +41,9 @@ export const DEFAULT_BUDGET: BriefBudget = {
   maxChangedFiles: 40,
 };
 
+/**
+ * Material about a release to pass to the model, after applying budget constraints.
+ */
 export interface BriefMaterial {
   releaseNotes: string;
   releaseNotesSource: string;
@@ -52,6 +61,10 @@ function clip<T>(items: T[], max: number): { items: T[]; clipped: boolean } {
     : { items, clipped: false };
 }
 
+/**
+ * Applies budget constraints to the request material, truncating inputs as necessary.
+ * Records whether any truncation occurred.
+ */
 export function budgetMaterial(
   request: BriefRequest,
   budget: BriefBudget = DEFAULT_BUDGET,
@@ -104,6 +117,9 @@ export function briefInstruction(): string {
   ].join('\n');
 }
 
+/**
+ * Constructs the message to send to the model, including context about the bump and attempt number.
+ */
 export function briefMessage(
   request: BriefRequest,
   material: BriefMaterial,

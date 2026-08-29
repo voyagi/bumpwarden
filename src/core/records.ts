@@ -6,6 +6,9 @@ export type Trigger = 'scheduled' | 'manual';
 export type RunStatus = 'running' | 'finished' | 'failed';
 export type ActionOutcome = 'opened' | 'updated' | 'commented' | 'dry-run' | 'skipped' | 'failed';
 
+/**
+ * A repository that bumpwarden monitors for dependency updates.
+ */
 export interface WatchedRepository {
   /** `owner/repo`, which is also the Firestore document id and the dashboard route segment. */
   id: string;
@@ -16,6 +19,9 @@ export interface WatchedRepository {
   demo: boolean;
 }
 
+/**
+ * Count of bumps in each risk band for a run or repository.
+ */
 export interface BandCounts {
   green: number;
   amber: number;
@@ -24,12 +30,18 @@ export interface BandCounts {
 
 export const ZERO_COUNTS: BandCounts = { green: 0, amber: 0, red: 0 };
 
+/**
+ * Counts how many times each band appears in the given array.
+ */
 export function countBands(bands: Band[]): BandCounts {
   const counts: BandCounts = { ...ZERO_COUNTS };
   for (const band of bands) counts[band] += 1;
   return counts;
 }
 
+/**
+ * Adds two band count objects together, summing each band separately.
+ */
 export function addCounts(left: BandCounts, right: BandCounts): BandCounts {
   return {
     green: left.green + right.green,
@@ -38,10 +50,16 @@ export function addCounts(left: BandCounts, right: BandCounts): BandCounts {
   };
 }
 
+/**
+ * Returns the total number of bumps across all bands.
+ */
 export function totalBumps(counts: BandCounts): number {
   return counts.green + counts.amber + counts.red;
 }
 
+/**
+ * The outcome of processing one repository during a run.
+ */
 export interface RepositoryResult {
   repositoryId: string;
   dependenciesConsidered: number;
@@ -82,6 +100,9 @@ export interface RunRecord {
   error: string | null;
 }
 
+/**
+ * A record of a single action taken by bumpwarden on a bump.
+ */
 export interface ActionRecord {
   id: string;
   bumpKey: string;
@@ -105,6 +126,9 @@ export interface ActionRecord {
   band: Band;
 }
 
+/**
+ * A stored record of a bump and its associated score, brief, and action.
+ */
 export interface BumpRecord {
   key: string;
   runId: string;
@@ -119,6 +143,9 @@ export interface BumpRecord {
   updatedAt: string;
 }
 
+/**
+ * Summary information about a watched project and its pending bumps.
+ */
 export interface ProjectSummary {
   repository: WatchedRepository;
   lastRunId: string | null;
@@ -174,6 +201,9 @@ export function actionIdFor(runId: string, bumpKey: string): string {
   return `${runId}|${bumpKey}`;
 }
 
+/**
+ * Aggregates the counts and actions across multiple repository results.
+ */
 export function summarizeRepositories(results: RepositoryResult[]): {
   counts: BandCounts;
   actions: number;

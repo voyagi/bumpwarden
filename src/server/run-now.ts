@@ -11,8 +11,14 @@ export const RUN_NOW_COOLDOWN_MS = 5 * 60_000;
 /** How far back the state looks. Runs are newest first, so this only has to cover one cooldown. */
 export const RUN_LOOKBACK = 20;
 
+/**
+ * The state of the run now feature: ready to run, currently running, in cooldown, or unavailable.
+ */
 export type RunNowState = 'ready' | 'running' | 'cooling' | 'unavailable';
 
+/**
+ * Status information for the run now feature, including state and timing details.
+ */
 export interface RunNowStatus {
   state: RunNowState;
   /** One plain sentence, printed next to the button and returned from the poll endpoint. */
@@ -119,7 +125,10 @@ export function runNowStatus(
   return { ...base, state: 'ready', message: finishedSentence(previous) };
 }
 
-/** What a refused POST answers with. Matching the state to a status code keeps the two honest. */
+/**
+ * HTTP status codes to return when refusing a run now request, mapped by state.
+ * What a refused POST answers with. Matching the state to a status code keeps the two honest.
+ */
 export const REFUSAL_STATUS = {
   unavailable: 403,
   running: 409,

@@ -1,5 +1,8 @@
 import { OAuth2Client } from 'google-auth-library';
 
+/**
+ * Claims extracted from a verified Google ID token.
+ */
 export interface IdTokenClaims {
   email?: string;
   email_verified?: boolean;
@@ -7,8 +10,14 @@ export interface IdTokenClaims {
   iss?: string;
 }
 
+/**
+ * Function type for verifying an ID token and extracting its claims.
+ */
 export type TokenVerifier = (idToken: string, audience: string) => Promise<IdTokenClaims | null>;
 
+/**
+ * Configuration for authenticating requests to the run endpoint.
+ */
 export interface RunAuthConfig {
   /** Service account Cloud Scheduler signs with. No value means the endpoint stays shut. */
   invokerEmail: string | null;
@@ -21,6 +30,9 @@ export interface RunAuthConfig {
   verify: TokenVerifier;
 }
 
+/**
+ * Result of an authorization check, either successful with the caller's identity or failed with a status code and reason.
+ */
 export type AuthResult =
   { ok: true; caller: string } | { ok: false; status: 401 | 403 | 503; reason: string };
 
@@ -68,6 +80,9 @@ export async function authorizeRun(
   return { ok: true, caller: claims.email };
 }
 
+/**
+ * Creates a token verifier that uses Google's OAuth2 client to verify ID tokens.
+ */
 export function googleTokenVerifier(client = new OAuth2Client()): TokenVerifier {
   return async (idToken, audience) => {
     const ticket = await client.verifyIdToken({ idToken, audience });

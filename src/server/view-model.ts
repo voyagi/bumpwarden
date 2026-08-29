@@ -37,14 +37,23 @@ const MIN_TRACK_PERCENT = 1.5;
 /** The heaviest single factor in the rubric, so a factor bar is proportional to what it could be. */
 const LARGEST_FACTOR = Math.max(...Object.values(POINTS));
 
+/**
+ * Returns the human-readable verdict word for the given band.
+ */
 export function verdictWord(band: Band): string {
   return VERDICT_WORD[band];
 }
 
+/**
+ * Calculates the CSS width percentage for a score track, ensuring a minimum visibility.
+ */
 export function trackWidth(total: number): string {
   return `${Math.max(total, MIN_TRACK_PERCENT)}%`;
 }
 
+/**
+ * Calculates the CSS width percentage for a factor bar, proportional to the largest possible factor.
+ */
 export function factorWidth(points: number): string {
   if (points <= 0) return '0';
   return `${Math.round((points / LARGEST_FACTOR) * 1000) / 10}%`;
@@ -58,6 +67,9 @@ export function factorWidth(points: number): string {
 const LABEL_CHAR_PERCENT = 0.72;
 const LABEL_PAD_PERCENT = 1.4;
 
+/**
+ * A pin positioned on the score axis with its assigned lane and label visibility status.
+ */
 export interface PlacedPin<T> {
   pin: T;
   lane: 'lane-a' | 'lane-b';
@@ -98,6 +110,9 @@ export function placePins<T extends { label: string; total: number }>(pins: T[])
   return placed;
 }
 
+/**
+ * Generates a human-readable sentence summarizing the bump queue by band counts.
+ */
 export function queueSentence(counts: BandCounts): string {
   const total = totalBumps(counts);
   if (total === 0) return 'no bumps pending';
@@ -118,16 +133,25 @@ function valid(iso: string | null): Date | null {
   return Number.isNaN(at.getTime()) ? null : at;
 }
 
+/**
+ * Formats an ISO timestamp as UTC time in HH:MM format, or 'unknown' if invalid.
+ */
 export function utcTime(iso: string | null): string {
   const at = valid(iso);
   return at ? at.toISOString().slice(11, 16) : 'unknown';
 }
 
+/**
+ * Formats an ISO timestamp as a full UTC date and time stamp, or 'unknown' if invalid.
+ */
 export function utcStamp(iso: string | null): string {
   const at = valid(iso);
   return at ? `${at.toISOString().slice(0, 10)} ${at.toISOString().slice(11, 19)}` : 'unknown';
 }
 
+/**
+ * Formats an ISO timestamp as a UTC date in YYYY-MM-DD format, or 'unknown' if invalid.
+ */
 export function utcDate(iso: string | null): string {
   const at = valid(iso);
   return at ? at.toISOString().slice(0, 10) : 'unknown';
@@ -151,6 +175,9 @@ export function elapsedSeconds(fromIso: string | null, now: Date): number {
   return Math.max(0, Math.round((now.getTime() - from.getTime()) / 1000));
 }
 
+/**
+ * Returns a human-readable description of what triggered a run.
+ */
 export function triggerWords(trigger: Trigger): string {
   return trigger === 'scheduled' ? 'Cloud Scheduler' : 'the dashboard';
 }
@@ -174,7 +201,10 @@ const ACTION_NOUN: Record<ActionKind, string> = {
   'comment-on-bot-pull-request': 'Comment on',
 };
 
-/** Short enough to scan down a column. The full sentence lives in the audit log, which has room. */
+/**
+ * Generates a concise label for an action suitable for display in a table column.
+ * Short enough to scan down a column. The full sentence lives in the audit log, which has room.
+ */
 export function actionLabel(action: ActionRecord): string {
   if (action.outcome === 'dry-run') return 'Dry run, no write access';
   if (action.outcome === 'skipped') return 'Carried to the next run';
@@ -203,6 +233,10 @@ const DROPPED_FROM_URLS = /[\t\n\r]/g;
  */
 const PATH_BASE = 'https://bumpwarden.invalid';
 
+/**
+ * Validates and returns a URL if it is safe to link to, or null if it should be shown as text only.
+ * Only http, https, and local paths are allowed. Protocol-relative URLs and other schemes are rejected.
+ */
 export function safeHref(value: string | null | undefined): string | null {
   if (!value) return null;
 
@@ -228,6 +262,9 @@ export function safeHref(value: string | null | undefined): string | null {
 
 const URL_IN_TEXT = /https?:\/\/\S+/;
 
+/**
+ * The parts of a factor's evidence text split around any URL it contains.
+ */
 export interface EvidenceParts {
   before: string;
   href: string | null;
@@ -265,6 +302,9 @@ function sentence(text: string): string {
   return text.length === 0 ? text : `${text[0]?.toUpperCase() ?? ''}${text.slice(1)}`;
 }
 
+/**
+ * A single row in the audit feed, representing either an action or a run event.
+ */
 export interface FeedRow {
   id: string;
   at: string;
