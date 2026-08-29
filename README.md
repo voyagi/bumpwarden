@@ -206,11 +206,21 @@ answers 403 to everything else. See [docs/deploy-review.md](docs/deploy-review.m
 **7. Tell the service its own URL.** The OIDC audience is the exact URL the scheduler calls, so the
 service cannot know it until it exists. Until this step the run endpoint answers 503 by design.
 
+The URL is built from the project number rather than read from `status.url`, because describe can
+still report the service's older random-hash hostname, and on a fresh project that hostname does
+not serve. The form below is the documented deterministic URL, and the curl proves it answers
+before anything is written.
+
 ```sh
-SERVICE_URL=$(gcloud run services describe bumpwarden --region europe-west1 --format='value(status.url)')
+PROJECT_NUMBER=$(gcloud projects describe bumpwarden --format='value(projectNumber)')
+SERVICE_URL="https://bumpwarden-${PROJECT_NUMBER}.europe-west1.run.app"
+curl -fs "$SERVICE_URL/health"
 gcloud run services update bumpwarden --region europe-west1 \
   --update-env-vars "SERVICE_BASE_URL=$SERVICE_URL"
 ```
+
+The curl must print `{"ok":true,"service":"bumpwarden"}`. If it does not, stop here: the deploy did
+not finish, and every later step fails in a way that does not say so.
 
 **8. Create the scheduler job.** Twice a day, at 06:00 and 18:00 UTC, which is what the dashboard
 tells readers to expect.
@@ -228,11 +238,12 @@ gcloud scheduler jobs create http bumpwarden-run \
 ```
 
 **9. Check it.** The first two answers prove the endpoint is shut to strangers, the third runs it
-for real.
+for real. The `-d ''` matters: a POST carrying no body at all can be refused by the frontend with
+a 411 before the app ever answers.
 
 ```sh
-curl -s "$SERVICE_URL/healthz"                       # {"ok":true,"service":"bumpwarden"}
-curl -s -o /dev/null -w '%{http_code}\n' -X POST "$SERVICE_URL/run"   # 401
+curl -s "$SERVICE_URL/health"                        # {"ok":true,"service":"bumpwarden"}
+curl -s -o /dev/null -w '%{http_code}\n' -X POST -d '' "$SERVICE_URL/run"   # 401
 gcloud scheduler jobs run bumpwarden-run --location europe-west1
 ```
 

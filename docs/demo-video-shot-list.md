@@ -8,7 +8,7 @@ rubric and the policy rather than on a progress bar. Everything on screen is the
 
 ## Before recording
 
-- [ ] The deployed service answers: `/healthz` returns `{"ok":true,...}` and the dashboard loads.
+- [ ] The deployed service answers: `/health` returns `{"ok":true,...}` and the dashboard loads.
 - [ ] **Run it once before recording, the same day, after 09:00 CEST when the free day resets.**
       That run spends 14 of the day's 20 model requests and leaves seven ready briefs in the
       cache. Check the queue page shows every brief as ready. The recorded run then reads GitHub,
