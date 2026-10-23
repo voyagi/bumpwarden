@@ -176,6 +176,23 @@ describe('a second run over the same bump', () => {
     expect(fake.issues.filter((issue) => issue.isPullRequest)).toHaveLength(1);
   });
 
+  it('keeps the pull request title when it updates the pull request', async () => {
+    const fake = github();
+    await actOnBump(await contextFor(fake), inputs(GREEN));
+    await actOnBump(await contextFor(fake), inputs(GREEN));
+
+    const pull = fake.issues.find((issue) => issue.isPullRequest);
+    expect(pull?.title).toBe(`chore(deps): express 4.18.2 to 5.0.0, clear, scored ${GREEN.total}`);
+  });
+
+  it('keeps the issue title when it updates the issue', async () => {
+    const fake = github();
+    await actOnBump(await contextFor(fake), inputs());
+    await actOnBump(await contextFor(fake), inputs());
+
+    expect(fake.issues.at(-1)?.title).toBe(`express 4.18.2 to 5.0.0: held, scored ${RED.total}`);
+  });
+
   it('finds its own issue by the hidden key, not by the title', async () => {
     const fake = github();
     await actOnBump(await contextFor(fake), inputs());

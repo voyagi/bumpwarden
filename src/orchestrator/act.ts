@@ -198,7 +198,11 @@ async function upsertIssue(
   input: BodyInput,
   labels: string[],
 ): Promise<ActionShape> {
-  const payload = { title: issueTitle(input.bump, input.score), body: actionBody(input), labels };
+  // The item found by its key may be a pull request this service opened on an earlier run.
+  const title = existing?.isPullRequest
+    ? pullRequestTitle(input.bump, input.score)
+    : issueTitle(input.bump, input.score);
+  const payload = { title, body: actionBody(input), labels };
 
   if (existing) {
     const updated = await actor.updateIssue(existing.number, payload);
@@ -252,13 +256,13 @@ async function openBumpPullRequest(
       text: edit.text,
       sha: file.sha,
       branch,
-      message: pullRequestTitle(input.bump),
+      message: pullRequestTitle(input.bump, input.score),
     });
   }
 
   const note = manifestNote(edit.from, edit.to, input.bump.dependency);
   const pull = await actor.createPullRequest({
-    title: pullRequestTitle(input.bump),
+    title: pullRequestTitle(input.bump, input.score),
     body: actionBody(input, note),
     head: branch,
     base: context.defaultBranch,

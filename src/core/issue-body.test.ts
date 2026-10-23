@@ -611,8 +611,11 @@ describe('titles and branch names', () => {
     expect(issueTitle(summaryOf(), scoreOf())).toContain('held');
   });
 
-  it('titles a pull request the way a bump pull request reads', () => {
-    expect(pullRequestTitle(summaryOf())).toBe('Bump express from 4.18.2 to 5.0.0');
+  it('titles a pull request in Conventional Commits form, with the verdict and the score', () => {
+    const score = scoreOf();
+    expect(pullRequestTitle(summaryOf(), score)).toBe(
+      `chore(deps): express 4.18.2 to 5.0.0, held, scored ${score.total}`,
+    );
   });
 
   it('derives one branch name per bump, legal as a git ref', () => {

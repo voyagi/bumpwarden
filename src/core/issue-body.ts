@@ -40,13 +40,21 @@ export function bumpTitle(bump: BumpSummary): string {
   return `${bump.dependency} ${bump.currentVersion} to ${bump.candidateVersion}`;
 }
 
-export function issueTitle(bump: BumpSummary, score: Score): string {
-  const verdict = VERDICT_WORD[score.band].toLowerCase();
-  return `${bumpTitle(bump)}: ${verdict}, scored ${score.total}`;
+function verdictPhrase(score: Score): string {
+  return `${VERDICT_WORD[score.band].toLowerCase()}, scored ${score.total}`;
 }
 
-export function pullRequestTitle(bump: BumpSummary): string {
-  return `Bump ${bump.dependency} from ${bump.currentVersion} to ${bump.candidateVersion}`;
+export function issueTitle(bump: BumpSummary, score: Score): string {
+  return `${bumpTitle(bump)}: ${verdictPhrase(score)}`;
+}
+
+/**
+ * A squash merge takes the pull request's title as the commit subject, so unlike an issue title it
+ * follows Conventional Commits, and it is the same title on the run that opens the pull request and
+ * on every run that updates it.
+ */
+export function pullRequestTitle(bump: BumpSummary, score: Score): string {
+  return `chore(deps): ${bumpTitle(bump)}, ${verdictPhrase(score)}`;
 }
 
 export function branchName(bump: BumpSummary): string {
