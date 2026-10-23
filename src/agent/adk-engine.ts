@@ -188,6 +188,29 @@ export async function readRun(events: AsyncIterable<Event>, pacer: RequestPacer)
 }
 
 /**
+ * One agent per brief, because its tools read that bump's material. Exported so a test reads the
+ * configuration the agent is really built with rather than a copy of it.
+ */
+export function briefAgent(model: string, apiKey: string, material: BriefMaterial): LlmAgent {
+  return new LlmAgent({
+    name: 'bumpwarden_brief',
+    model: new Gemini({ model, apiKey }),
+    instruction: briefInstruction(),
+    tools: readOnlyTools(material),
+    outputSchema: briefModelSchema,
+    // Each bump is judged on its own material; carrying history would let one package's
+    // release notes colour the next package's brief.
+    includeContents: 'none',
+    disallowTransferToParent: true,
+    disallowTransferToPeers: true,
+    // No temperature, topP or topK. Gemini deprecated all three: newer models ignore them, later
+    // ones are documented to refuse a request carrying one with a 400, and earlier Gemini 3 models
+    // reason worse away from their defaults.
+    generateContentConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
+  });
+}
+
+/**
  * The real Gemini path. It is created from an explicit key rather than from the ambient
  * environment so that a test, a script or a second instance can never pick one up by accident.
  */
@@ -199,19 +222,7 @@ export function createAdkBriefEngine(options: AdkBriefEngineOptions): PacedBrief
     model,
     pacer,
     async generate(request: BriefRequest, material: BriefMaterial, attempt: number) {
-      const agent = new LlmAgent({
-        name: 'bumpwarden_brief',
-        model: new Gemini({ model, apiKey: options.apiKey }),
-        instruction: briefInstruction(),
-        tools: readOnlyTools(material),
-        outputSchema: briefModelSchema,
-        // Each bump is judged on its own material; carrying history would let one package's
-        // release notes colour the next package's brief.
-        includeContents: 'none',
-        disallowTransferToParent: true,
-        disallowTransferToPeers: true,
-        generateContentConfig: { temperature: 0.2, maxOutputTokens: MAX_OUTPUT_TOKENS },
-      });
+      const agent = briefAgent(model, options.apiKey, material);
 
       const runner = new Runner({
         appName: APP_NAME,

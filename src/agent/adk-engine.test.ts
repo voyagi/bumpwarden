@@ -11,12 +11,14 @@ import {
   DEFAULT_BRIEF_MODEL,
   MAX_OUTPUT_TOKENS,
   REQUESTS_PER_BRIEF,
+  briefAgent,
   countsAsRequest,
   limitFrom,
   readRun,
   retryDelayFrom,
 } from './adk-engine.js';
 import type { RequestPacer } from './pace.js';
+import type { BriefMaterial } from './prompt.js';
 import { MAX_RETRY_WAIT_MS, ModelRefusal } from './write-brief.js';
 
 /**
@@ -56,6 +58,24 @@ describe('the brief the model is asked for', () => {
 
   it('asks for the model the About page names', () => {
     expect(DEFAULT_BRIEF_MODEL).toBe(BRIEF_MODEL);
+  });
+
+  it('builds the agent with no sampling parameter, which newer Gemini models refuse', () => {
+    const material: BriefMaterial = {
+      releaseNotes: '',
+      releaseNotesSource: 'no published release notes',
+      commitSubjects: [],
+      usageSites: [],
+      changedFiles: [],
+      truncated: false,
+      evidence: '',
+    };
+    const config = briefAgent(BRIEF_MODEL, 'not-a-real-key', material).generateContentConfig;
+
+    expect(config?.maxOutputTokens).toBe(MAX_OUTPUT_TOKENS);
+    for (const key of ['temperature', 'topP', 'topK']) {
+      expect(config).not.toHaveProperty(key);
+    }
   });
 });
 
